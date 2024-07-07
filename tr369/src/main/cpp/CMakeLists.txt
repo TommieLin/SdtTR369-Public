@@ -12,8 +12,7 @@ project("tr369")
 # You can define multiple libraries, and CMake builds them for you.
 # Gradle automatically packages shared libraries with your APK.
 
-aux_source_directory(openTr369/core SRC_TR369_CORE)
-aux_source_directory(openTr369/vendor SRC_TR369_VENDOR)
+aux_source_directory(obuspa/src SRC_TR369_CORE)
 
 add_library(
         # Sets the name of the library.
@@ -24,15 +23,13 @@ add_library(
         skSource/sk_tr369_jni.cpp
         skSource/sk_jni_callback.cpp
         skSource/sk_jni_network.cpp
-        ${SRC_TR369_CORE} ${SRC_TR369_VENDOR}
+        ${SRC_TR369_CORE}
 )
 
 include_directories(
-        openTr369/core
-        openTr369/include
-        openTr369/vendor
+        obuspa/inc
         skSource
-        libs/armeabi-v7a/include
+        libs/include
 )
 
 set(CMAKE_C_FLAGS
@@ -60,4 +57,5 @@ target_link_libraries(
         ${CMAKE_SOURCE_DIR}/libs/${ANDROID_ABI}/libtms_zlib.so
         ${CMAKE_SOURCE_DIR}/libs/${ANDROID_ABI}/libtms_iconv.so
         ${CMAKE_SOURCE_DIR}/libs/${ANDROID_ABI}/libtms_xml2.so
+        ${CMAKE_SOURCE_DIR}/libs/${ANDROID_ABI}/libtms_usp.so
 )

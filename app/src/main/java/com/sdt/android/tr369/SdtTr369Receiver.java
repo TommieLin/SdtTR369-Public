@@ -227,7 +227,7 @@ public class SdtTr369Receiver extends BroadcastReceiver {
                 || TextUtils.isEmpty(caCertContext)
                 || TextUtils.isEmpty(clientPrivateKey)
                 || TextUtils.isEmpty(clientCertContext)) {
-            LogUtils.e(TAG, "initMqttServerConfigs: Certificate parameters are empty");
+            LogUtils.e(TAG, "initMqttServerConfigs: Parameters are empty");
             return false;
         }
 

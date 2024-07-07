@@ -28,7 +28,6 @@ extern int SK_TR369_API_GetProperty(const char *name, char *value, int size, con
 extern int SK_TR369_API_GetParams(const char *name, char *value, int size);
 extern int SK_TR369_API_SetParams(const char *name, const char *value);
 extern int SK_TR369_API_GetDatabaseStr(const char *name, const char *param, char *value, int size);
-extern int SK_TR369_API_SendEvent(const char *value);
 extern void SK_TR369_API_StartServer();
 
 #ifdef __cplusplus

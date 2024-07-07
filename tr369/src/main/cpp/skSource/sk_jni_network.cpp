@@ -121,7 +121,7 @@ static char *calculateHMac(const char *key, const char *data) {
     unsigned int hashLen;
 
     HMAC_CTX *hmacContext = HMAC_CTX_new();
-    HMAC_Init_ex(hmacContext, key, strlen(key), EVP_sha256(), NULL);
+    HMAC_Init_ex(hmacContext, key, strlen(key), EVP_sha256(), nullptr);
     HMAC_Update(hmacContext, (unsigned char *) data, strlen(data));
     HMAC_Final(hmacContext, hash, &hashLen);
     HMAC_CTX_free(hmacContext);
@@ -132,9 +132,9 @@ static char *calculateHMac(const char *key, const char *data) {
 }
 
 char *SK_TR369_API_GetXAuthToken(const char *dev_mac, const char *dev_sn) {
-    char *result = NULL;
+    char *result = nullptr;
 
-    if (dev_mac == NULL || dev_sn == NULL || dev_mac[0] == '\0' || dev_sn[0] == '\0') {
+    if (dev_mac == nullptr || dev_sn == nullptr || dev_mac[0] == '\0' || dev_sn[0] == '\0') {
         SK_ERR("Parameters are empty");
         return result;
     }
