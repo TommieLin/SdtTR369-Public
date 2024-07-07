@@ -1,0 +1,2450 @@
+From 95808ef69b48cdfdf0e431394fb45e835c5b2e4b Mon Sep 17 00:00:00 2001
+From: caiyongsheng <caiyongsheng@skyworth.com>
+Date: Tue, 12 Mar 2024 20:10:00 +0800
+Subject: [PATCH] [Claro][TMS] TMS bring up
+
+Change-Id: I48338c325daa27069279b2796387fadcd414dc45
+---
+
+diff --git a/android/device/realtek/rtd1325/common/sepolicy/voututil.te b/android/device/realtek/rtd1325/common/sepolicy/voututil.te
+index 45d7451..f6f45a1 100755
+--- a/android/device/realtek/rtd1325/common/sepolicy/voututil.te
++++ b/android/device/realtek/rtd1325/common/sepolicy/voututil.te
+@@ -23,3 +23,7 @@
+ 
+ allow voututil vendor_hwc_per_prop:file { open read };
+ allow voututil vendor_hwc_per_prop:property_service set;
++
++allow voututil vendor_shell_exec:file execute_no_trans;
++allow voututil vendor_toolbox_exec:file execute_no_trans;
++allow voututil proc_stat:file {getattr read open};
+diff --git a/android/device/skyworthdigital/common/sepolicy/common/property_contexts b/android/device/skyworthdigital/common/sepolicy/common/property_contexts
+index b618446..b019034 100755
+--- a/android/device/skyworthdigital/common/sepolicy/common/property_contexts
++++ b/android/device/skyworthdigital/common/sepolicy/common/property_contexts
+@@ -2,3 +2,6 @@
+ ro.vendor.skyworthdigital.      u:object_r:vendor_skyworthdigital_prop:s0
+ ro.hardware.skyworthdigital.    u:object_r:vendor_skyworthdigital_prop:s0
+ ro.boot.skyworthdigital.        u:object_r:vendor_skyworthdigital_prop:s0
++ro.vendor.platform.             u:object_r:vendor_skyworthdigital_prop:s0
++
++
+diff --git a/android/frameworks/base/core/java/android/app/usage/NetworkStatsManager.java b/android/frameworks/base/core/java/android/app/usage/NetworkStatsManager.java
+index 8a6c85d..3288e51 100644
+--- a/android/frameworks/base/core/java/android/app/usage/NetworkStatsManager.java
++++ b/android/frameworks/base/core/java/android/app/usage/NetworkStatsManager.java
+@@ -674,6 +674,10 @@
+                         : NetworkTemplate.buildTemplateWifi(NetworkTemplate.WIFI_NETWORKID_ALL,
+                                 subscriberId);
+                 break;
++		    // SWMD-577: Add statistical Ethernet usage interface
++            case ConnectivityManager.TYPE_ETHERNET:
++                template = NetworkTemplate.buildTemplateEthernet();
++                break;
+             default:
+                 throw new IllegalArgumentException("Cannot create template for network type "
+                         + networkType + ", subscriberId '"
+diff --git a/android/frameworks/base/services/core/java/com/android/server/pm/PackageManagerShellCommand.java b/android/frameworks/base/services/core/java/com/android/server/pm/PackageManagerShellCommand.java
+index 1aa80a9..86d4f0c 100644
+--- a/android/frameworks/base/services/core/java/com/android/server/pm/PackageManagerShellCommand.java
++++ b/android/frameworks/base/services/core/java/com/android/server/pm/PackageManagerShellCommand.java
+@@ -1338,6 +1338,17 @@
+             }
+         }
+ 
++        /* SWMD-693/SWMD-694: Blacklist and whitelist functions required by TMS */
++        String pkgName = (params.installerPackageName != null) ? params.installerPackageName : params.sessionParams.appPackageName;
++        if (!isSdtCMSAllowedToInstall(pkgName)) {
++            Slog.w(TAG, "TMS - Activity{" + pkgName + "} Installation is prohibited!");
++            pw.println("Error: This application has been added to the blacklist and " +
++                    "is prohibited from being installed or opened.");
++            return 1;
++        }
++        /* SWMD-693/SWMD-694 end */
++		
++
+         final int sessionId = doCreateSession(params.sessionParams,
+                 params.installerPackageName, params.userId);
+         boolean abandonSession = true;
+@@ -1374,6 +1385,59 @@
+             }
+         }
+     }
++	
++    /**
++     * SWMD-693/SWMD-694: Blacklist and whitelist functions required by TMS
++     *
++     * It is necessary to determine whether the application exists on the blacklist or is not
++     * on the whitelist. The content of the blacklist and whitelist depends on the TMS.
++     *
++     * @param activityPkgName The package name required to detect whether it can be installed.
++     * @return true or false. Is the application allowed to install
++     */
++    private boolean isSdtCMSAllowedToInstall(String activityPkgName) {
++        if (activityPkgName == null)
++            return true;
++
++        boolean isWhiteListPkg = true;
++        int numPackages = SystemProperties.getInt("persist.sys.tr069.whitelist.number", 0);
++        if (numPackages <= 0) {
++            numPackages = SystemProperties.getInt("persist.sys.tr069.blacklist.number", 0);
++            if (numPackages <= 0) {
++                return true;
++            }
++            isWhiteListPkg = false;
++        }
++
++        ArrayList<String> packageNames = new ArrayList<>();
++        for (int i = 1; i <= numPackages; ++i) {
++            String packageList = "";
++            if (isWhiteListPkg) {
++                packageList = SystemProperties.get("persist.sys.tr069.whitelist.part" + i, "");
++            } else {
++                packageList = SystemProperties.get("persist.sys.tr069.blacklist.part" + i, "");
++            }
++
++            if (!packageList.isEmpty()) {
++                packageList = packageList.substring(1, packageList.length() - 1).replaceAll("\"", "");
++                String[] array = packageList.split(",");
++                Collections.addAll(packageNames, array);
++            }
++        }
++
++        if (packageNames.isEmpty()) {
++            return true;
++        }
++
++        if (isWhiteListPkg && !packageNames.contains(activityPkgName)) {
++            return false;
++        } else if (!isWhiteListPkg && packageNames.contains(activityPkgName)) {
++            return false;
++        }
++
++        return true;
++    }
++    /* SWMD-693/SWMD-694 end */
+ 
+     private int doWaitForStagedSessionReady(int sessionId, long timeoutMs, PrintWriter pw)
+               throws RemoteException {
+diff --git a/android/frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java b/android/frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+index ecaecb4..7b0a2fe 100644
+--- a/android/frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
++++ b/android/frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+@@ -3422,6 +3422,24 @@
+             }
+             return 0;
+         }
++		
++        // When the STB is locked, only the below keys can be used, and other keys are forbidden.
++        // Add by skyworth Outis, 2023/3/1
++        if (SystemProperties.get("persist.sys.tr069.lock").equals("1")
++                && keyCode != KeyEvent.KEYCODE_POWER && keyCode != KeyEvent.KEYCODE_DPAD_CENTER
++                && keyCode != KeyEvent.KEYCODE_DPAD_LEFT && keyCode != KeyEvent.KEYCODE_DPAD_RIGHT
++                && keyCode != KeyEvent.KEYCODE_DPAD_UP && keyCode != KeyEvent.KEYCODE_DPAD_DOWN
++                && keyCode != KeyEvent.KEYCODE_BACK && keyCode != KeyEvent.KEYCODE_VOLUME_MUTE
++                && keyCode != KeyEvent.KEYCODE_VOLUME_UP && keyCode != KeyEvent.KEYCODE_VOLUME_DOWN
++                && keyCode != KeyEvent.KEYCODE_0 && keyCode != KeyEvent.KEYCODE_1
++                && keyCode != KeyEvent.KEYCODE_2 && keyCode != KeyEvent.KEYCODE_3
++                && keyCode != KeyEvent.KEYCODE_4 && keyCode != KeyEvent.KEYCODE_5
++                && keyCode != KeyEvent.KEYCODE_6 && keyCode != KeyEvent.KEYCODE_7
++                && keyCode != KeyEvent.KEYCODE_8 && keyCode != KeyEvent.KEYCODE_9) {
++            Log.e(TAG, "The set-top box is locked. This key cannot be used. keycode: " + keyCode);
++            return 0;
++        }
++				
+ 
+         final boolean interactive = (policyFlags & FLAG_INTERACTIVE) != 0;
+         final boolean canceled = event.isCanceled();
+diff --git a/android/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java b/android/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java
+index 1371e67..9f0bf39 100644
+--- a/android/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java
++++ b/android/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java
+@@ -103,6 +103,7 @@
+ import android.os.IBinder;
+ import android.os.Process;
+ import android.os.RemoteException;
++import android.os.SystemProperties;
+ import android.os.Trace;
+ import android.os.UserHandle;
+ import android.os.UserManager;
+@@ -128,6 +129,8 @@
+ 
+ import java.io.PrintWriter;
+ import java.text.DateFormat;
++import java.util.ArrayList;
++import java.util.Collections;
+ import java.util.Date;
+ 
+ /**
+@@ -868,6 +871,17 @@
+                     + "} from uid " + callingUid);
+         }
+ 
++        /* SWMD-693/SWMD-694: Blacklist and whitelist functions required by TMS */
++        if (intent != null && intent.getComponent() != null) {
++            String activityPkgName = intent.getComponent().getPackageName();
++            if (!isSdtCMSAllowedToStart(activityPkgName, aInfo.applicationInfo.isSystemApp())) {
++                Slog.w(TAG, "TMS - Activity{" + activityPkgName + "} Starting is prohibited!");
++                err = ActivityManager.START_PERMISSION_DENIED;
++                return err;
++            }
++        }
++        /* SWMD-693/SWMD-694 end */		
++
+         ActivityRecord sourceRecord = null;
+         ActivityRecord resultRecord = null;
+         if (resultTo != null) {
+@@ -1194,6 +1208,61 @@
+     }
+ 
+     /**
++     * SWMD-693/SWMD-694: Blacklist and whitelist functions required by TMS
++     *
++     * It is necessary to determine whether the application exists on the blacklist or is not
++     * on the whitelist. The content of the blacklist and whitelist depends on the TMS.
++     *
++     * @param activityPkgName The package name required to detect whether it can be started.
++     * @param isSystemApp Is this application a system application
++     * @return true or false. Is the application allowed to start
++     */
++    private boolean isSdtCMSAllowedToStart(String activityPkgName, boolean isSystemApp) {
++        if (activityPkgName == null)
++            return true;
++
++        boolean isWhiteListPkg = true;
++        int numPackages = SystemProperties.getInt("persist.sys.tr069.whitelist.number", 0);
++        if (numPackages <= 0) {
++            numPackages = SystemProperties.getInt("persist.sys.tr069.blacklist.number", 0);
++            if (numPackages <= 0) {
++                return true;
++            }
++            isWhiteListPkg = false;
++        }
++
++        ArrayList<String> packageNames = new ArrayList<>();
++        for (int i = 1; i <= numPackages; ++i) {
++            String packageList = "";
++            if (isWhiteListPkg) {
++                packageList = SystemProperties.get("persist.sys.tr069.whitelist.part" + i, "");
++            } else {
++                packageList = SystemProperties.get("persist.sys.tr069.blacklist.part" + i, "");
++            }
++
++            if (!packageList.isEmpty()) {
++                packageList = packageList.substring(1, packageList.length() - 1).replaceAll("\"", "");
++                String[] array = packageList.split(",");
++                Collections.addAll(packageNames, array);
++            }
++        }
++
++        if (packageNames.isEmpty()) {
++            return true;
++        }
++
++        if (isWhiteListPkg && !isSystemApp && !packageNames.contains(activityPkgName)) {
++            return false;
++        } else if (!isWhiteListPkg && packageNames.contains(activityPkgName)) {
++            return false;
++        }
++
++        return true;
++    }
++    /* Skyworth end */
++
++
++    /**
+      * Return true if background activity is really aborted.
+      *
+      * TODO(b/131748165): Refactor the logic so we don't need to call this method everywhere.
+diff --git a/android/vendor/google_gtvs/products/gtvs.mk b/android/vendor/google_gtvs/products/gtvs.mk
+index 9a44629..fc0a23b 100755
+--- a/android/vendor/google_gtvs/products/gtvs.mk
++++ b/android/vendor/google_gtvs/products/gtvs.mk
+@@ -19,7 +19,6 @@
+     LatinIMEGoogleTvPrebuilt \
+     Katniss \
+     SetupWraithPrebuilt \
+-    TVLauncher \
+     TVRecommendations \
+     AndroidMediaShell \
+     AtvRemoteService \
+diff --git a/android/vendor/realtek/interfaces/current.txt b/android/vendor/realtek/interfaces/current.txt
+index e537827..df2a24f 100644
+--- a/android/vendor/realtek/interfaces/current.txt
++++ b/android/vendor/realtek/interfaces/current.txt
+@@ -13,7 +13,7 @@
+ fb87aea20b4f4bf773039dbed8967800baee06b82f474f7bd79196529864ea58 vendor.realtek.dptxutil.provider@1.0::IDPTxUtil
+ c63fef9769f216cb1bc68cac857ae19bf5c546d3ee94124e2520b3454d155068 vendor.realtek.allocator@1.0::IAllocator
+ 576e1bf75cf125518dc31c70bd7035be65309bbe1cef9ed302867fecac1bba2b vendor.realtek.allocator@1.0::IHSidebandClient
+-a51b086ab17eee08245b16a950ec54bb01da2678b6ff5b7478ff02df8544f846 vendor.realtek.voututil@1.0::IVoutUtil
++7325d6de78e9555d6f593bc045e115cd2eef4400effd4c071db05b2da85bd30d vendor.realtek.voututil@1.0::IVoutUtil
+ 247cef7907e403bc4b2e1c025ac761f8ad02593db999c14799ce295d0c5615a4 vendor.realtek.audioredirectutil@1.0::IAudioRedirectUtil
+ 766cd06966263f612ef70aa063778d975099ad92e96b7414b60be2a2944b2d2e vendor.realtek.seutil.common@1.0::types
+ 4cc58f9609f3a6108effeb633e9b15b4f4406ca81c66a1d0fb0f6350df09b25e vendor.realtek.seutil.provider@1.0::ISeUtil
+diff --git a/android/vendor/realtek/interfaces/voututil/1.0/IVoutUtil.hal b/android/vendor/realtek/interfaces/voututil/1.0/IVoutUtil.hal
+index 6e71584..1f4090d 100644
+--- a/android/vendor/realtek/interfaces/voututil/1.0/IVoutUtil.hal
++++ b/android/vendor/realtek/interfaces/voututil/1.0/IVoutUtil.hal
+@@ -74,4 +74,5 @@
+         setAISREnable(int32_t enabled) generates (int32_t status);
+         setDVVideoPriorityEnabled(int32_t enabled) generates (int32_t status);
+         getDVVideoPriorityEnabled() generates (bool enabled);
++        getProcStat() generates (int32_t result);
+ };
+diff --git a/android/vendor/realtek/interfaces/voututil/1.0/default/VoutUtilImpl.cpp b/android/vendor/realtek/interfaces/voututil/1.0/default/VoutUtilImpl.cpp
+index 5f35dea..b66035d 100755
+--- a/android/vendor/realtek/interfaces/voututil/1.0/default/VoutUtilImpl.cpp
++++ b/android/vendor/realtek/interfaces/voututil/1.0/default/VoutUtilImpl.cpp
+@@ -578,6 +578,69 @@
+     return voututil;
+ }
+ 
++Return<int32_t> VoutUtilImpl::getProcStat()
++{
++    ALOGD("%s", __FUNCTION__);
++    long curTalCPUTime = 0;
++    long curIdleTime = 0;
++    long lastTalCPUTime  = 0;
++    long lastIdleTime = 0;
++    getCPUTime(lastTalCPUTime, lastIdleTime);
++    getCPUTime(curTalCPUTime, curIdleTime);
++	ALOGD("%s lastTalCPUTime %ld, lastIdleTime %ld, curTalCPUTime %ld, curIdleTime %ld", __FUNCTION__, lastTalCPUTime, lastIdleTime, curTalCPUTime, curIdleTime);
++    long cpuRunning = curTalCPUTime - lastTalCPUTime;
++	long gapIdle = curIdleTime - lastIdleTime;
++    ALOGD("%s cpuRunning %ld, gapIdle %ld", __FUNCTION__, cpuRunning, gapIdle);
++    float totalUsage = 100 * (cpuRunning - gapIdle) / (float) cpuRunning;
++    ALOGD("%s totalUsage is %f", __FUNCTION__, totalUsage);
++    int32_t ret = (int32_t) totalUsage;
++    ALOGD("%s t is %d", __FUNCTION__, ret);
++    return ret;
++}
++
++void VoutUtilImpl::getCPUTime(long& totalCPUTime, long& idleTime)
++{
++    ALOGD("%s", __FUNCTION__);
++    FILE *file = popen("cat /proc/stat", "r");
++    if (!file) {
++        perror("popen error!");
++        exit(EXIT_FAILURE);
++       // return Void();
++    }
++    char buf[256];
++    if ((fgets(buf, sizeof(buf) - 1, file)))
++    {
++        ALOGD("%s buf is %s", __FUNCTION__, buf);
++    }
++    else
++    {
++        ALOGD("%s buf is null and return", __FUNCTION__);
++        pclose(file);
++       // return Void();
++    }
++
++    pclose(file);
++    char* values_1 = NULL;
++    values_1 = buf;
++    char* ptrSave = NULL;
++    int i = 0;
++    long cpuInfos[10] = {};
++
++    strtok_r(values_1, "  ", &ptrSave);
++    values_1 = NULL;
++    while (i < 10)
++    {
++        cpuInfos[i] = atoi(strtok_r(values_1, " ", &ptrSave));
++        totalCPUTime = totalCPUTime + cpuInfos[i];
++        if (i == 3)
++            idleTime = cpuInfos[i];
++        ALOGD("%s cpuInfos[%d] = %ld", __FUNCTION__, i, cpuInfos[i]);
++        values_1 = NULL;
++        i++;
++    }
++    ALOGD("%s idleTime = %ld, totalCPUTime = %ld", __FUNCTION__, idleTime, totalCPUTime);
++}
++
+ } // namespace implementation
+ } // namespace V1_0
+ } // namespace voututil
+diff --git a/android/vendor/realtek/interfaces/voututil/1.0/default/VoutUtilImpl.h b/android/vendor/realtek/interfaces/voututil/1.0/default/VoutUtilImpl.h
+index 4b11542..c9f386d 100644
+--- a/android/vendor/realtek/interfaces/voututil/1.0/default/VoutUtilImpl.h
++++ b/android/vendor/realtek/interfaces/voututil/1.0/default/VoutUtilImpl.h
+@@ -90,6 +90,8 @@
+     Return<int32_t> setAISREnable(int32_t enabled) override;
+     Return<int32_t> setDVVideoPriorityEnabled(int32_t enabled) override;
+     Return<bool> getDVVideoPriorityEnabled() override;
++    Return<int32_t> getProcStat() override;
++    void getCPUTime(long& totalCPUTime, long& idleTime);
+ };
+ 
+ extern "C" IVoutUtil* HIDL_FETCH_IVoutUtil(const char* name);
+diff --git a/android/vendor/realtek/libs/libRtkDisplayDeviceCtrl/src/java/com/realtek/hardware/RtkHDMIManager2.java b/android/vendor/realtek/libs/libRtkDisplayDeviceCtrl/src/java/com/realtek/hardware/RtkHDMIManager2.java
+index ac8e97a..63ba41c 100755
+--- a/android/vendor/realtek/libs/libRtkDisplayDeviceCtrl/src/java/com/realtek/hardware/RtkHDMIManager2.java
++++ b/android/vendor/realtek/libs/libRtkDisplayDeviceCtrl/src/java/com/realtek/hardware/RtkHDMIManager2.java
+@@ -5,11 +5,15 @@
+ 
+ import android.os.SystemProperties;
+ import android.os.Handler;
++import android.os.Looper;
+ import android.os.SystemClock;
+ import android.content.Context;
+ import android.util.Log;
+ import android.provider.Settings;
+ import android.provider.Settings.SettingNotFoundException;
++import android.view.Display;
++import android.hardware.display.DeviceProductInfo;
++import android.hardware.display.DisplayManager;
+ 
+ import com.realtek.hardware.RtkTVSystem;
+ import com.realtek.hardware.ColorSet;
+@@ -183,7 +187,10 @@
+     private static final int DEEP_COLOR_MUST    = 2;
+ 
+     private static final Object sLock = new Object();
+-    private final Handler mHandler = new Handler();
++    private final Handler mHandler = new Handler(Looper.getMainLooper());
++
++    private Display mDisplay;
++    private DeviceProductInfo mDeviceProductInfo;
+ 
+     private static final int[] sDeepColorHDRs = {
+              RtkTVSystem.VO_HDR_CTRL_HDR_GAMMA
+@@ -423,15 +430,15 @@
+      * @support_3d: b'0-Support 3D, b'1-FramePacking, b'2-TopAndBottom, b'3-SideBySideHalf
+      * @support_fs: b'0-Support Frequency-Shift, b'1-Support FS 3D
+      */
+-    static class HDMIFormatSupport {
+-        int mVIC;
+-        int mRgb444;
+-        int mYuv422;
+-        int mYuv444;
+-        int mYuv420;
+-        int mSupport3D;
+-        int msupportFS;
+-        int mReserved;
++    public static class HDMIFormatSupport {
++        public int mVIC;
++        public int mRgb444;
++        public int mYuv422;
++        public int mYuv444;
++        public int mYuv420;
++        public int mSupport3D;
++        public int msupportFS;
++        public int mReserved;
+ 
+         TVSystemInfo mInfo;
+ 
+@@ -1117,7 +1124,7 @@
+ 
+     private static volatile RtkHDMIManager2 sInstance = null;
+ 
+-    //private Context mContext;
++    private Context mContext;
+ 
+     // for ignore EDID support.
+     private ColorSet mAutoDeepColorSetIgnoreEDID = new ColorSet(ColorYUV420,Depth12Bit);
+@@ -1150,13 +1157,26 @@
+ 
+     RtkHDMIManager2(Context c) {
+         Log.d(TAG, "RtkHDMIManager2()");
+-        //mContext = c;
++        mContext = c;
+         if(DEBUG) {
+             dumpTVSystemInfoMap();
+         }
+         initHDMIInfo();
+     }
+ 
++    public String getHDMIProductInfo() {
++        DisplayManager displayManager = (DisplayManager) mContext.getSystemService(Context.DISPLAY_SERVICE);
++        mDisplay = displayManager.getDisplay(Display.DEFAULT_DISPLAY);
++        mDeviceProductInfo = mDisplay.getDeviceProductInfo();
++        String ProductName = mDeviceProductInfo.getManufacturerPnpId();
++//         Log.d(TAG, "getHDMProductInfo ProductName:" + ProductName);
++        return ProductName;
++    }
++
++    public static Vector<HDMIFormatSupport> getRawEDIDSupportList() {
++        return mEDIDSupportList;
++    }
++
+     public void release() {
+         native_release();
+         // then clear instance
+@@ -2328,7 +2348,7 @@
+     }
+ 
+     public boolean isTVSupport3D() {
+-        // 获取锁
++        // get lock
+         synchronized (sLock) {
+             try {
+                 Log.d(TAG, "Call isTVSupport3D");
+@@ -2478,7 +2498,7 @@
+         return info;
+     }
+ 
+-    private static HDMIFormatSupport getFormatSupport(int vic) {
++    public static HDMIFormatSupport getFormatSupport(int vic) {
+         synchronized(sLock) {
+             for(int i=0;i<mEDIDSupportList.size();i++) {
+                 if(vic == mEDIDSupportList.get(i).mVIC) {
+diff --git a/android/vendor/realtek/libs/libRtkDisplayDeviceCtrl/src/java/com/realtek/hardware/RtkVoutUtilManager.java b/android/vendor/realtek/libs/libRtkDisplayDeviceCtrl/src/java/com/realtek/hardware/RtkVoutUtilManager.java
+index 2dd76a0..dfa212c 100644
+--- a/android/vendor/realtek/libs/libRtkDisplayDeviceCtrl/src/java/com/realtek/hardware/RtkVoutUtilManager.java
++++ b/android/vendor/realtek/libs/libRtkDisplayDeviceCtrl/src/java/com/realtek/hardware/RtkVoutUtilManager.java
+@@ -365,6 +365,10 @@
+ 
+     public boolean getDVVideoPriorityEnabled() {
+         return _getDVVideoPriorityEnabled();
++    }	
++
++    public int getProcStat() {
++        return _getProcStat();
+     }
+     /**
+     * Below declaration are implemented by c native code
+@@ -421,6 +425,8 @@
+     private native void _setAISREnable(int enabled);
+     private native void _setDVVideoPriorityEnabled(int enabled);
+     private native boolean _getDVVideoPriorityEnabled();
++    private native int _getProcStat();
++
+     private Rect getZoomRect(int state) {
+         Rect rect = new Rect();
+ 
+diff --git a/android/vendor/realtek/libs/libRtkDisplayDeviceCtrl/src/jni/com_realtek_hardware_RtkVoutUtilManager.cpp b/android/vendor/realtek/libs/libRtkDisplayDeviceCtrl/src/jni/com_realtek_hardware_RtkVoutUtilManager.cpp
+index 0f37cca..aeb0f40 100644
+--- a/android/vendor/realtek/libs/libRtkDisplayDeviceCtrl/src/jni/com_realtek_hardware_RtkVoutUtilManager.cpp
++++ b/android/vendor/realtek/libs/libRtkDisplayDeviceCtrl/src/jni/com_realtek_hardware_RtkVoutUtilManager.cpp
+@@ -348,6 +348,11 @@
+     ALOGD("[%d] %sArmin()\n", __LINE__, __func__);
+     return IVoutUtil::getService()->getDVVideoPriorityEnabled();
+ }
++
++static jint realtek_hardware_RtkVoutUtilManager_getProcStat(JNIEnv *env __attribute__((unused)), jobject obj __attribute__((unused))) {
++    ALOGD("%s:%d\n", __func__, __LINE__);
++    return IVoutUtil::getService()->getProcStat();
++}
+ /*
+  * Array of methods.
+  *
+@@ -406,6 +411,7 @@
+     {"_setAISREnable", "(I)V", (void*) realtek_hardware_RtkVoutUtilManager_setAISREnable },
+     {"_setDVVideoPriorityEnabled", "(I)V", (void*) realtek_hardware_RtkVoutUtilManager_setDVVideoPriorityEnabled },
+     {"_getDVVideoPriorityEnabled", "()Z", (void*) realtek_hardware_RtkVoutUtilManager_getDVVideoPriorityEnabled },
++    {"_getProcStat", "()I", (void*) realtek_hardware_RtkVoutUtilManager_getProcStat },
+ };
+ 
+ /*
+diff --git a/android/vendor/skyworthdigital/TV/apks/Android.mk b/android/vendor/skyworthdigital/TV/apks/Android.mk
+index e5c5876..0d40ef4 100755
+--- a/android/vendor/skyworthdigital/TV/apks/Android.mk
++++ b/android/vendor/skyworthdigital/TV/apks/Android.mk
+@@ -50,30 +50,4 @@
+ LOCAL_VENDOR_MODULE := false
+ include $(BUILD_PREBUILT)
+ 
+-include $(CLEAR_VARS)
+-LOCAL_MODULE := SdtUpdate
+-LOCAL_SRC_FILES := $(LOCAL_MODULE).apk
+-LOCAL_DEX_PREOPT := false
+-LOCAL_MODULE_CLASS := APPS
+-LOCAL_MODULE_SUFFIX := .apk
+-LOCAL_MODULE_TARGET_ARCH := arm
+-LOCAL_CERTIFICATE := PRESIGNED
+-LOCAL_REPLACE_PREBUILT_APK_INSTALLED := $(LOCAL_PATH)/$(LOCAL_SRC_FILES)
+-LOCAL_VENDOR_MODULE := false
+-LOCAL_PRIVILEGED_MODULE := true
+-include $(BUILD_PREBUILT)
+ 
+-include $(CLEAR_VARS)
+-LOCAL_MODULE := SdtLogTools
+-LOCAL_SRC_FILES := LogTools/$(LOCAL_MODULE).apk
+-LOCAL_MODULE_CLASS := APPS
+-LOCAL_MODULE_SUFFIX := .apk
+-LOCAL_MODULE_TARGET_ARCH := arm
+-LOCAL_CERTIFICATE := platform
+-LOCAL_VENDOR_MODULE := false
+-LOCAL_POST_INSTALL_CMD := mkdir -p "$(TARGET_OUT)/etc/skyscripts"; \
+-                          cp -rf "$(LOCAL_PATH)/LogTools/script/sky_script.sh" "$(TARGET_OUT)/etc/skyscripts/"; \
+-						  cp -rf "$(LOCAL_PATH)/LogTools/script/log" "$(TARGET_OUT)/etc/skyscripts/"; \
+-						  mkdir -p "$(TARGET_OUT)/etc/init"; \
+-						  cp -rf "$(LOCAL_PATH)/LogTools/script/init.skyworth.skyscripts.rc" "$(TARGET_OUT)/etc/init/"
+-include $(BUILD_PREBUILT)
+diff --git a/android/vendor/skyworthdigital/TV/apks/LogTools/SdtLogTools.apk b/android/vendor/skyworthdigital/TV/apks/LogTools/SdtLogTools.apk
+deleted file mode 100755
+index 948f326..0000000
+--- a/android/vendor/skyworthdigital/TV/apks/LogTools/SdtLogTools.apk
++++ /dev/null
+@@ -1,3 +0,0 @@
+-version https://git-lfs.github.com/spec/v1
+-oid sha256:18d4b620ee6e15a37665d7a7d33f976f8c265bd4b22d80293560a620debc20de
+-size 6432535
+diff --git a/android/vendor/skyworthdigital/TV/apks/LogTools/script/init.skyworth.skyscripts.rc b/android/vendor/skyworthdigital/TV/apks/LogTools/script/init.skyworth.skyscripts.rc
+deleted file mode 100755
+index 8f698b9..0000000
+--- a/android/vendor/skyworthdigital/TV/apks/LogTools/script/init.skyworth.skyscripts.rc
++++ /dev/null
+@@ -1,10 +0,0 @@
+-service sky_script /system/bin/sh /system/etc/skyscripts/sky_script.sh
+-    class core
+-    user root
+-    group root shell log readproc cache everybody system
+-	seclabel u:r:sky_script:s0
+-    oneshot
+-
+-on post-fs-data
+-	start sky_script
+-	
+\ No newline at end of file
+diff --git a/android/vendor/skyworthdigital/TV/apks/LogTools/script/log/sky_log_cpuinfo.sh b/android/vendor/skyworthdigital/TV/apks/LogTools/script/log/sky_log_cpuinfo.sh
+deleted file mode 100755
+index 513220e..0000000
+--- a/android/vendor/skyworthdigital/TV/apks/LogTools/script/log/sky_log_cpuinfo.sh
++++ /dev/null
+@@ -1,58 +0,0 @@
+-#! /system/bin/sh
+-#script_desc=this is shell script for catch cpu information
+-
+-# cpuinfo store dir
+-CPUINFO_DIR_NAME=data/cache/log/cpuinfo
+-# cpuinfo per file size(10M)
+-CPUINFO_PER_FILE_SIZE=10485760
+-# cpuinfo max file count(10)
+-CPUINFO_MAX_FILE_COUNT=10
+-
+-# function read cpu temperature
+-function cpu_temperature {
+-	local temperature=$(cat sys/class/thermal/thermal_zone0/temp)
+-	echo $(echo "scale=2; ${temperature}/1000" | bc)
+-}
+-
+-# function read cpu usage
+-function cpu_usage {
+-	local new_cpu_info=$(cat /proc/stat | grep -w cpu | awk '{print $2,$3,$4,$5,$6,$7,$8}')
+-	local new_cpu_sys_idle=$(echo $new_cpu_info | awk '{print $4}')
+-	local new_cpu_total_time=$(echo $new_cpu_info | awk '{print $1+$2+$3+$4+$5+$6+$7}')
+-	local final_cpu_IDLE=`echo ${new_cpu_sys_idle} ${cpu_sys_idle} | awk '{print $1-$2}'`
+-	local final_cpu_total_time=`echo ${new_cpu_total_time} ${cpu_total_time} | awk '{print $1-$2}'`
+-	local final_cpu_usage=`echo ${final_cpu_IDLE} ${final_cpu_total_time} | awk '{printf "%.2f", 100-$1/$2*100}'`
+-	cpu_info=new_cpu_info
+-	cpu_sys_idle=new_cpu_sys_idle
+-	cpu_total_time=new_cpu_total_time
+-	echo "${final_cpu_usage}%"
+-}
+-
+-mkdir -p $CPUINFO_DIR_NAME
+-
+-cpu_info=$(cat /proc/stat | grep -w cpu | awk '{print $2,$3,$4,$5,$6,$7,$8}')
+-cpu_sys_idle=$(echo $cpu_info | awk '{print $4}')
+-cpu_total_time=$(echo $cpu_info | awk '{print $1+$2+$3+$4+$5+$6+$7}')
+-cpu_file_name=$CPUINFO_DIR_NAME/cpuinfo_`date +%Y%m%d-%H%M%S`
+-
+-while :
+-do
+-	current_time=`date +%Y-%m-%d_%H:%M:%S`
+-	cpu_temperature=$(cpu_temperature)
+-	cpu_usage=$(cpu_usage)
+-	echo temperature:$cpu_temperature usage:$cpu_usage time:$current_time >> $cpu_file_name
+-	current_file_size=$(stat --format=%s $cpu_file_name)
+-	current_file_count=$(ls -l $CPUINFO_DIR_NAME | grep "^-" | wc -l)
+-	if [ $current_file_size -gt $CPUINFO_PER_FILE_SIZE ]; then
+-		tar -zcf $cpu_file_name.tar $cpu_file_name
+-		rm -rf $cpu_file_name
+-		sync
+-		cpu_file_name=$CPUINFO_DIR_NAME/cpuinfo_`date +%Y%m%d-%H%M%S`
+-	fi
+-	if [ $current_file_count -gt $CPUINFO_MAX_FILE_COUNT ]; then
+-		local first_file_name=`echo $(ls -rt $CPUINFO_DIR_NAME) | awk '{print $1}'`
+-		rm -rf $CPUINFO_DIR_NAME/$first_file_name
+-		sync
+-	fi
+-	sleep 10
+-done
+diff --git a/android/vendor/skyworthdigital/TV/apks/LogTools/script/log/sky_log_kernel.sh b/android/vendor/skyworthdigital/TV/apks/LogTools/script/log/sky_log_kernel.sh
+deleted file mode 100755
+index 91358cd..0000000
+--- a/android/vendor/skyworthdigital/TV/apks/LogTools/script/log/sky_log_kernel.sh
++++ /dev/null
+@@ -1,33 +0,0 @@
+-#! /system/bin/sh
+-#script_desc=this is shell script for catch kernel log
+-
+-# kernel store dir
+-KERNEL_DIR_NAME=data/cache/log/kernel
+-# kernel per file size(10M)
+-KERNEL_PER_FILE_SIZE=10485760
+-# kernel max file count(10)
+-KERNEL_MAX_FILE_COUNT=10
+-
+-mkdir -p $KERNEL_DIR_NAME
+-
+-echo 8 > /proc/sys/kernel/printk
+-
+-while :
+-do
+-	file_name=$KERNEL_DIR_NAME/kernel_`date +%Y%m%d-%H%M%S`
+-	current_file_size=0
+-	while (( current_file_size <= KERNEL_PER_FILE_SIZE ))
+-	do
+-		dmesg -c >> $file_name
+-		current_file_size=$(stat --format=%s $file_name)
+-		sleep 2
+-	done
+-	tar -zcf $file_name.tar $file_name
+-	rm -rf $file_name
+-	current_file_count=$(ls -l $KERNEL_DIR_NAME | grep "^-" | wc -l)
+-	if [ $current_file_count -gt $KERNEL_MAX_FILE_COUNT ]; then
+-		local first_file_name=`echo $(ls -rt $KERNEL_DIR_NAME) | awk '{print $1}'`
+-		rm -rf $KERNEL_DIR_NAME/$first_file_name
+-		sync
+-	fi
+-done
+diff --git a/android/vendor/skyworthdigital/TV/apks/LogTools/script/log/sky_log_logcat.sh b/android/vendor/skyworthdigital/TV/apks/LogTools/script/log/sky_log_logcat.sh
+deleted file mode 100755
+index 7df92d8..0000000
+--- a/android/vendor/skyworthdigital/TV/apks/LogTools/script/log/sky_log_logcat.sh
++++ /dev/null
+@@ -1,37 +0,0 @@
+-#! /system/bin/sh
+-#script_desc=this is shell script for catch logcat
+-
+-# logcat store dir
+-LOGCAT_DIR_NAME=data/cache/log/logcat
+-# logcat per file size(10M)
+-LOGCAT_PER_FILE_SIZE=10240
+-# logcat max file count(10)
+-LOGCAT_MAX_FILE_COUNT=10
+-
+-mkdir -p $LOGCAT_DIR_NAME
+-
+-file_name=$LOGCAT_DIR_NAME/logcat_`date +%Y%m%d-%H%M%S`
+-logcat -vtime -n $LOGCAT_MAX_FILE_COUNT -r $LOGCAT_PER_FILE_SIZE -f $file_name &
+-
+-while :
+-do
+-	sleep 30
+-	source_files=$(ls $file_name.*)
+-	for source_file in ${source_files[@]}
+-	do
+-		if [[ $source_file == *.tar ]];then
+-			echo no need to tar
+-		else 
+-			echo need to tar $source_file
+-			local target_file=$LOGCAT_DIR_NAME/logcat_`date +%Y%m%d-%H%M%S`.tar
+-			tar -zcf $target_file $source_file
+-			rm -rf $source_file
+-		fi
+-		sleep 3
+-	done
+-	local current_file_count=$(ls -l $LOGCAT_DIR_NAME/*.tar | grep "^-" | wc -l)
+-	if [ $current_file_count -gt $LOGCAT_MAX_FILE_COUNT ]; then
+-		local first_file_name=`echo $(ls -rt $LOGCAT_DIR_NAME/*.tar) | awk '{print $1}'`
+-		rm -rf $first_file_name
+-	fi
+-done
+diff --git a/android/vendor/skyworthdigital/TV/apks/LogTools/script/sky_script.sh b/android/vendor/skyworthdigital/TV/apks/LogTools/script/sky_script.sh
+deleted file mode 100755
+index bd5dbac..0000000
+--- a/android/vendor/skyworthdigital/TV/apks/LogTools/script/sky_script.sh
++++ /dev/null
+@@ -1,73 +0,0 @@
+-#!/bin/bash
+-echo sky_script boot
+-
+-log_scripts_path=system/etc/skyscripts/log/
+-log_internal_path=data/cache/log/
+-log_internal_path_anr=data/anr/*
+-log_internal_path_tombstones=data/tombstones/*
+-log_external_path=logtools/
+-log_external_path_anr=logtools/log/anr/
+-log_external_path_tombstones=logtools/log/tombstones/
+-
+-# function catch log
+-function catch_log {
+-	mkdir -p $log_internal_path
+-	local script_list=${command_param//,/ }
+-	for script in ${script_list[@]}; do
+-		sh $log_scripts_path$script &
+-	done
+-	while true; do
+-		echo sky_script running
+-		sleep 60
+-	done
+-}
+-
+-# function export log
+-function export_log {
+-	am broadcast -a com.skw.script.log.EXPORT_START
+-	# copy log file
+-	local export_path=$command_param/$log_external_path
+-	mkdir -p $export_path
+-	cp -r $log_internal_path $export_path
+-	# copy anr file
+-	local export_path_anr=$command_param/$log_external_path_anr
+-	mkdir -p $export_path_anr
+-	cp -r $log_internal_path_anr $export_path_anr
+-	# copy tombstones file
+-	local export_path_tombstones=$command_param/$log_external_path_tombstones
+-	mkdir -p $export_path_tombstones
+-	cp -r $log_internal_path_tombstones $export_path_tombstones
+-	# execute sync
+-	sync
+-	am broadcast -a com.skw.script.log.EXPORT_FINISH
+-}
+-
+-# function clear log
+-function clear_log {
+-	am broadcast -a com.skw.script.log.CLEAR_START
+-	rm -rf $log_internal_path/*
+-	am broadcast -a com.skw.script.log.CLEAR_FINISH
+-}
+-
+-# read command and param
+-log_command=$(cat /mnt/skyinfo/log_command)
+-for cmd in ${log_command[@]}; do
+-	if [[ $cmd == command_name* ]];then
+-		command_name=${cmd//command_name=/}
+-	elif [[ $cmd == command_param* ]];then
+-		command_param=${cmd//command_param=/}
+-	fi
+-done
+-
+-if [ "catch_log" == $command_name ]; then
+-	echo catch log
+-	catch_log
+-elif [ "export_log" == $command_name ]; then
+-	echo export log
+-	export_log
+-elif [ "clear_log" == $command_name ]; then
+-	echo clear log
+-	clear_log
+-else
+-	echo nothing
+-fi
+diff --git a/android/vendor/skyworthdigital/TV/apks/LogTools/sepolicy/file_contexts b/android/vendor/skyworthdigital/TV/apks/LogTools/sepolicy/file_contexts
+deleted file mode 100755
+index db0197f..0000000
+--- a/android/vendor/skyworthdigital/TV/apks/LogTools/sepolicy/file_contexts
++++ /dev/null
+@@ -1,2 +0,0 @@
+-
+-/system/etc/skyscripts/*.sh 	u:object_r:sky_script_exec:s0
+diff --git a/android/vendor/skyworthdigital/TV/apks/LogTools/sepolicy/sky_scripts.te b/android/vendor/skyworthdigital/TV/apks/LogTools/sepolicy/sky_scripts.te
+deleted file mode 100755
+index ad6da87..0000000
+--- a/android/vendor/skyworthdigital/TV/apks/LogTools/sepolicy/sky_scripts.te
++++ /dev/null
+@@ -1,34 +0,0 @@
+-type sky_script, domain, coredomain;
+-type sky_script_exec,file_type,exec_type,system_file_type;
+-init_daemon_domain(sky_script)
+-
+-allow sky_script shell_exec:file { map entrypoint read getattr execute open execute_no_trans };
+-allow sky_script toolbox_exec:file { map getattr execute read open execute_no_trans };
+-allow sky_script logcat_exec:file { map getattr execute read open execute_no_trans };
+-allow sky_script cache_file:dir { create rw_dir_perms rmdir };
+-allow sky_script cache_file:file { create rw_file_perms unlink };
+-allow sky_script kmsg_device:chr_file { read open };
+-allow sky_script kernel:system { syslog_read syslog_mod };
+-allow sky_script logdr_socket:sock_file { write };
+-allow sky_script logd:unix_stream_socket { connectto };
+-allow sky_script self:capability2 { syslog };
+-allow sky_script fuse:dir { search write add_name create read open };
+-allow sky_script fuse:file { create read write open };
+-allow sky_script mnt_user_file:dir { search };
+-allow sky_script skyinfo_file:dir { search };
+-allow sky_script skyinfo_file:file { read open write };
+-allow sky_script system_file:file { execute_no_trans };
+-allow sky_script servicemanager:binder { call };
+-allow sky_script system_server:binder { call transfer };
+-allow system_server sky_script:binder { call };
+-allow sky_script activity_service:service_manager { find };
+-allow sky_script proc_stat:file { read open };
+-allow sky_script sysfs_thermal:file { read open };
+-allow sky_script anr_data_file:dir { getattr read open search };
+-allow sky_script anr_data_file:file { getattr read open };
+-allow sky_script tombstone_data_file:dir { getattr read open search };
+-allow sky_script tombstone_data_file:file { getattr read open };
+-allow recovery sysfs_thermal:file { open read write getattr };
+-allow recovery sysfs_thermal:dir search;
+-allow hal_thermal_default sysfs_thermal:dir r_dir_perms;
+-allow hal_thermal_default sysfs_thermal:file r_file_perms;
+diff --git a/android/vendor/skyworthdigital/TV/configs/skyconfig/certs/certs_config.xml b/android/vendor/skyworthdigital/TV/configs/skyconfig/certs/certs_config.xml
+new file mode 100755
+index 0000000..7bc0f6a
+--- /dev/null
++++ b/android/vendor/skyworthdigital/TV/configs/skyconfig/certs/certs_config.xml
+@@ -0,0 +1,37 @@
++<configuration>
++    // 一个server节点代表一套证书，一套访问网络用的证书包括CA证书、证书、证书key; name
++    // 表示证书存储此套证书的名称；可以用此name取到更新证书时用到的原始证书和apps访问网络需要的请求证书
++    // 前面 cmc_ca_preset cms_ca_preset cmc_cert_preset cmc_certkey_preset cms_cert cms_certkey
++    // 表示证书存储里面此套证书预制在盒子里面证书的节点位置
++    // cmc_url表示证书更新的地址 reset_url表示重置证书的地址 check_url表示检测预制在盒子里面的证书的地址
++    // apps_urls 配置了所有需要使用此套证书的apps 的 url 域名和端口地址(BaseUrl);Apps 可以通过传 launcher-ui
++    // 这种节点的节点名称，拿到对应的证书，并且Maven库可以使用 launcher-ui 的地址填充App的https请求
++    // 一个server代表一套证书，无论mqtt还是https，可以使用同一套证书
++    <cert
++        name="topvcloud_https"
++        default="true">
++		<!--name="topvcloud_https"-->
++		<!--name="sky_topvcloud_hk_1"-->
++        <cmc-ca-preset>cmc_ca_preset_0</cmc-ca-preset>
++        <cms-ca-preset>cms_ca_preset_0</cms-ca-preset>
++        <cmc-cert-preset>cmc_cert_preset_0</cmc-cert-preset>
++        <cmc-certkey-preset>cmc_certkey_preset_0</cmc-certkey-preset>
++        <cms-cert>cms_cert_0</cms-cert>
++        <cms-certkey>cms_certkey_0</cms-certkey>
++
++        <apps-urls>
++            <cmc-url>https://api-eurdemo.itvguide.cn:18443/</cmc-url>
++            <reset-url>https://api-eurdemo.itvguide.cn:17443/</reset-url>
++            <check-url>https://api-eurdemo.itvguide.cn:30906/</check-url>
++			<url name="sky_launcher">https://api-eurdemo.itvguide.cn:30908/</url>
++			<url name="platform_mqtt">ssl://api-eurdemo.itvguide.cn:28883/</url>
++			<url name="platform_mqtt_2">ssl://159.138.25.235:28883/</url>
++        </apps-urls>
++		// 暂时失效
++        <!--<apps-whitelist>
++            <package-name>com.skyworthdigital.launcher</package-name>
++            <package-name>com.skyworthdigital.device.monitor</package-name>
++        </apps-whitelist>-->
++    </cert>
++
++</configuration>
+diff --git a/android/vendor/skyworthdigital/TV/configs/skyconfig/config.properties b/android/vendor/skyworthdigital/TV/configs/skyconfig/config.properties
+index f3627be..f1c2a6c 100755
+--- a/android/vendor/skyworthdigital/TV/configs/skyconfig/config.properties
++++ b/android/vendor/skyworthdigital/TV/configs/skyconfig/config.properties
+@@ -50,3 +50,32 @@
+ BASE_URL=https://172.28.11.232:30906
+ ######## end SkyRemoteControlOTA.apk 的配置项 #########
+ 
++######## start TMS环境通用配置项 #########
++tms_url=https://api-eurdemo.itvguide.cn
++tms_operator_name=StarTV
++tms_tr069_port=38086
++tms_ota_port=30906
++tms_cert_port=18443
++tms_secret_key port=17443
++tms_launcher_port=30908
++tms_collect_port=38889
++######## end TMS环境通用配置项 #########
++######## start SdtTr069 的配置项 #########
++tms_tr069_path=/acs/69999
++######## end SdtTr069 的配置项 #########
++
++######## start SkyCoreService.apk 的配置项 #########
++device_enable_burn_key=true
++tms_proto_flag=StarTV
++######## end SkyCoreService.apk 的配置项 #########
++
++######## start SkwAtvCollect.apk 的配置项 #########
++collect_list={\
++"infos":[{"name": "playReady","enable": true,"interval": 10},\
++  {"name": "emmcModel","enable": false},\
++  {"name": "emmcLifecycle","enable": false}],\
++"warnings":[{"name": "CPU_Temp_High","enable": false,"interval": 1,"warningValue": 10,"warningInterval": 10}],\
++"events":[{"name": "appInstallation","enable": false}]\
++}
++######## end SkwAtvCollect.apk 的配置项 #########
++
+diff --git a/android/vendor/skyworthdigital/TV/product.mk b/android/vendor/skyworthdigital/TV/product.mk
+index 810e57a..9afbd39 100755
+--- a/android/vendor/skyworthdigital/TV/product.mk
++++ b/android/vendor/skyworthdigital/TV/product.mk
+@@ -8,18 +8,13 @@
+     SdtRcuOtaActivity \
+ 	SdtFrontPanelLedsService \
+ 	SdtProductTest \
+-	SdtUpdate
+-
+-ifeq ($(SK_LOG_TOOLS),true)
+-BOARD_VENDOR_SEPOLICY_DIRS += vendor/skyworthdigital/TV/apks/LogTools/sepolicy
+-PRODUCT_PACKAGES += \
+-    SdtLogTools 
+-endif
+ 
+ PRODUCT_COPY_FILES += \
+     vendor/skyworthdigital/TV/configs/feature/operator-flags.xml:$(TARGET_COPY_OUT_SYSTEM)/etc/sysconfig/operator-flags.xml \
+     vendor/skyworthdigital/TV/configs/skyconfig/config.properties:$(TARGET_COPY_OUT_VENDOR)/etc/skyconfig/config.properties \
+-	vendor/skyworthdigital/TV/prebuilt/permissions/privapp-permissions-SkyworthDigital.xml:$(TARGET_COPY_OUT_SYSTEM)/etc/permissions/privapp-permissions-SkyworthDigital.xml \
+     vendor/skyworthdigital/TV/configs/google_launcher/launcher_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/launcher/launcher_configuration.xml \
+     vendor/skyworthdigital/TV/configs/google_launcher/launcher_app_recommendations.xml:$(TARGET_COPY_OUT_VENDOR)/etc/launcher/launcher_app_recommendations.xml \
++	
++PRODUCT_COPY_FILES += vendor/skyworthdigital/TV/configs/skyconfig/certs/certs_config.xml:$(TARGET_COPY_OUT_VENDOR)/etc/skyconfig/certs/certs_config.xml
+ 
++$(call inherit-product-if-exists, vendor/tms/products/tms.mk)
+\ No newline at end of file
+diff --git a/android/vendor/tms/Android.mk b/android/vendor/tms/Android.mk
+new file mode 100755
+index 0000000..5053e7d
+--- /dev/null
++++ b/android/vendor/tms/Android.mk
+@@ -0,0 +1 @@
++include $(call all-subdir-makefiles)
+diff --git a/android/vendor/tms/apps/Android.mk b/android/vendor/tms/apps/Android.mk
+new file mode 100755
+index 0000000..d3754f0
+--- /dev/null
++++ b/android/vendor/tms/apps/Android.mk
+@@ -0,0 +1,61 @@
++LOCAL_PATH := $(my-dir)
++SK_LOCAL_PATH:=$(LOCAL_PATH)
++##############################
++include $(CLEAR_VARS)
++LOCAL_MODULE := SdtUpdate
++LOCAL_SRC_FILES := $(LOCAL_MODULE).apk
++LOCAL_DEX_PREOPT := false
++LOCAL_MODULE_CLASS := APPS
++LOCAL_MODULE_SUFFIX := .apk
++LOCAL_MODULE_TARGET_ARCH := arm
++LOCAL_CERTIFICATE := PRESIGNED
++LOCAL_REPLACE_PREBUILT_APK_INSTALLED := $(LOCAL_PATH)/$(LOCAL_SRC_FILES)
++LOCAL_VENDOR_MODULE := false
++LOCAL_PRIVILEGED_MODULE := true
++include $(BUILD_PREBUILT)
++
++include $(CLEAR_VARS)
++LOCAL_MODULE := SdtCoreService
++LOCAL_SRC_FILES := $(LOCAL_MODULE).apk
++LOCAL_MODULE_CLASS := APPS
++LOCAL_MODULE_SUFFIX := .apk
++LOCAL_MODULE_TARGET_ARCH := arm
++LOCAL_CERTIFICATE := platform
++LOCAL_VENDOR_MODULE := false
++LOCAL_PRIVILEGED_MODULE := false
++include $(BUILD_PREBUILT)
++
++include $(CLEAR_VARS)
++LOCAL_MODULE := SdtTr069
++LOCAL_SRC_FILES := $(LOCAL_MODULE).apk
++LOCAL_MODULE_CLASS := APPS
++LOCAL_MODULE_SUFFIX := .apk
++LOCAL_MODULE_TARGET_ARCH := arm
++LOCAL_CERTIFICATE := platform
++LOCAL_VENDOR_MODULE := false
++include $(BUILD_PREBUILT)
++
++# include $(CLEAR_VARS)
++# LOCAL_MODULE := SdtLogTools
++# LOCAL_SRC_FILES := SdtLogTools/$(LOCAL_MODULE).apk
++# LOCAL_MODULE_CLASS := APPS
++# LOCAL_MODULE_SUFFIX := .apk
++# LOCAL_MODULE_TARGET_ARCH := arm
++# LOCAL_CERTIFICATE := platform
++# LOCAL_VENDOR_MODULE := false
++# LOCAL_POST_INSTALL_CMD := mkdir -p "$(TARGET_OUT)/etc/skyscripts"; \
++#                           cp -rf "$(SK_LOCAL_PATH)/SdtLogTools/script/sky_script.sh" "$(TARGET_OUT)/etc/skyscripts/"; \
++# 						  cp -rf "$(SK_LOCAL_PATH)/SdtLogTools/script/log" "$(TARGET_OUT)/etc/skyscripts/"; \
++# 						  mkdir -p "$(TARGET_OUT)/etc/init"; \
++# 						  cp -rf "$(SK_LOCAL_PATH)/SdtLogTools/script/init.skyworth.skyscripts.rc" "$(TARGET_OUT)/etc/init/"
++# include $(BUILD_PREBUILT)
++
++include $(SK_LOCAL_PATH)/SdtDiagnose/Android.mk
++
++ifneq ($(SK_CMS_LAUNCHER),atv)
++include $(SK_LOCAL_PATH)/SdtLauncher/Android.mk
++endif
++
++ifeq ($(SK_SUPPORT_COLLECT),true)
++include $(SK_LOCAL_PATH)/SdtAtvCollect/Android.mk
++endif
+\ No newline at end of file
+diff --git a/android/vendor/tms/apps/SdtAtvCollect/Android.mk b/android/vendor/tms/apps/SdtAtvCollect/Android.mk
+new file mode 100755
+index 0000000..ab19554
+--- /dev/null
++++ b/android/vendor/tms/apps/SdtAtvCollect/Android.mk
+@@ -0,0 +1,14 @@
++LOCAL_PATH := $(my-dir)
++
++include $(CLEAR_VARS)
++LOCAL_MODULE := SdtAtvCollect
++LOCAL_SRC_FILES := $(LOCAL_MODULE).apk
++LOCAL_MODULE_CLASS := APPS
++LOCAL_MODULE_SUFFIX := .apk
++LOCAL_MODULE_TARGET_ARCH := arm
++LOCAL_CERTIFICATE := platform
++LOCAL_PRIVILEGED_MODULE := true
++LOCAL_SYSTEM_EXT_MODULE := true
++LOCAL_ENFORCE_USES_LIBRARIES := false
++LOCAL_DEX_PREOPT := false
++include $(BUILD_PREBUILT)
+\ No newline at end of file
+diff --git a/android/vendor/tms/apps/SdtAtvCollect/SdtAtvCollect.apk b/android/vendor/tms/apps/SdtAtvCollect/SdtAtvCollect.apk
+new file mode 100755
+index 0000000..13fecc7
+--- /dev/null
++++ b/android/vendor/tms/apps/SdtAtvCollect/SdtAtvCollect.apk
+@@ -0,0 +1,3 @@
++version https://git-lfs.github.com/spec/v1
++oid sha256:23343978c829b645f6265ee13e7e001139a6a05da3785ac73caa9baf3445b484
++size 5208299
+diff --git a/android/vendor/tms/apps/SdtAtvCollect/sepolicy/system_app.te b/android/vendor/tms/apps/SdtAtvCollect/sepolicy/system_app.te
+new file mode 100755
+index 0000000..9def8ea
+--- /dev/null
++++ b/android/vendor/tms/apps/SdtAtvCollect/sepolicy/system_app.te
+@@ -0,0 +1,2 @@
++allow system_app boardinfo_hal_service:hwservice_manager { find };
++allow system_app boardinfo:binder { call transfer };
+\ No newline at end of file
+diff --git a/android/vendor/tms/apps/SdtAtvCollect/sepolicy/system_control.te b/android/vendor/tms/apps/SdtAtvCollect/sepolicy/system_control.te
+new file mode 100755
+index 0000000..78a1d31
+--- /dev/null
++++ b/android/vendor/tms/apps/SdtAtvCollect/sepolicy/system_control.te
+@@ -0,0 +1 @@
++allow system_control sysfs_thermal:file { read open } ;
+\ No newline at end of file
+diff --git a/android/vendor/tms/apps/SdtCoreService.apk b/android/vendor/tms/apps/SdtCoreService.apk
+new file mode 100755
+index 0000000..e1dc0ff
+--- /dev/null
++++ b/android/vendor/tms/apps/SdtCoreService.apk
+@@ -0,0 +1,3 @@
++version https://git-lfs.github.com/spec/v1
++oid sha256:7362c46309005a3e8296c13da991b65b67dc2212812254a4919ae00ad93ef6ad
++size 1868511
+diff --git a/android/vendor/tms/apps/SdtDiagnose/Android.mk b/android/vendor/tms/apps/SdtDiagnose/Android.mk
+new file mode 100755
+index 0000000..ec71429
+--- /dev/null
++++ b/android/vendor/tms/apps/SdtDiagnose/Android.mk
+@@ -0,0 +1,25 @@
++LOCAL_PATH := $(my-dir)
++
++include $(CLEAR_VARS)
++LOCAL_MODULE := SdtDiagnose
++LOCAL_SRC_FILES := $(LOCAL_MODULE).apk
++LOCAL_MODULE_CLASS := APPS
++LOCAL_MODULE_SUFFIX := .apk
++LOCAL_MODULE_TARGET_ARCH := arm
++LOCAL_CERTIFICATE := platform
++LOCAL_VENDOR_MODULE := false
++LOCAL_ENFORCE_USES_LIBRARIES := false
++
++LOCAL_SYSTEM_EXT_MODULE := true
++LOCAL_PRIVATE_PLATFORM_APIS := true
++LOCAL_PROGUARD_ENABLED := disabled
++# LOCAL_STATIC_JAVA_LIBRARIES += RtkDisplayDeviceCtrl
++LOCAL_JNI_SHARED_LIBRARIES := librtk-display_ctrl_jni
++
++LOCAL_POST_INSTALL_CMD := mkdir -p "$(TARGET_OUT_SYSTEM_EXT)/etc/skyscripts"; \
++                          cp -rf "$(LOCAL_PATH)/script/tr069_script.sh" "$(TARGET_OUT_SYSTEM_EXT)/etc/skyscripts/"; \
++                          cp -rf "$(LOCAL_PATH)/script/log" "$(TARGET_OUT_SYSTEM_EXT)/etc/skyscripts/"; \
++                          mkdir -p "$(TARGET_OUT_SYSTEM_EXT)/etc/init"; \
++                          cp -rf "$(LOCAL_PATH)/script/init.tr069.scripts.logcat.rc" "$(TARGET_OUT_SYSTEM_EXT)/etc/init/"; \
++                          cp -rf "$(LOCAL_PATH)/script/init.tr069.scripts.tcpdump.rc" "$(TARGET_OUT_SYSTEM_EXT)/etc/init/"
++include $(BUILD_PREBUILT)
+diff --git a/android/vendor/tms/apps/SdtDiagnose/SdtDiagnose.apk b/android/vendor/tms/apps/SdtDiagnose/SdtDiagnose.apk
+new file mode 100755
+index 0000000..d42ed92
+--- /dev/null
++++ b/android/vendor/tms/apps/SdtDiagnose/SdtDiagnose.apk
+@@ -0,0 +1,3 @@
++version https://git-lfs.github.com/spec/v1
++oid sha256:60a6f6f0fbfb8bf606aa71584cb5999127010e45995e2450f64b7ff6959e7fd1
++size 8404344
+diff --git a/android/vendor/tms/apps/SdtDiagnose/script/init.tr069.scripts.logcat.rc b/android/vendor/tms/apps/SdtDiagnose/script/init.tr069.scripts.logcat.rc
+new file mode 100755
+index 0000000..975f785
+--- /dev/null
++++ b/android/vendor/tms/apps/SdtDiagnose/script/init.tr069.scripts.logcat.rc
+@@ -0,0 +1,9 @@
++service tr069_script /system/bin/sh /system_ext/etc/skyscripts/tr069_script.sh
++    class core
++    user root
++    group root shell log readproc cache everybody system
++    seclabel u:r:sky_script:s0
++    oneshot
++
++on post-fs-data
++    start tr069_script
+diff --git a/android/vendor/tms/apps/SdtDiagnose/script/init.tr069.scripts.tcpdump.rc b/android/vendor/tms/apps/SdtDiagnose/script/init.tr069.scripts.tcpdump.rc
+new file mode 100755
+index 0000000..6e50684
+--- /dev/null
++++ b/android/vendor/tms/apps/SdtDiagnose/script/init.tr069.scripts.tcpdump.rc
+@@ -0,0 +1,16 @@
++service tcpdump /system/bin/tcpdump ${persist.sys.skyworth.tcpdump.args} -w /data/tcpdump/test1.pcap
++    class core
++    user root
++    group system
++    disabled
++    oneshot
++
++on property:persist.sys.skyworth.tcpdump=1
++    start tcpdump
++
++on property:persist.sys.skyworth.tcpdump=0
++    stop tcpdump
++    chmod 0660 /data/tcpdump/test1.pcap
++
++on post-fs-data
++    mkdir /data/tcpdump 0770 system system
+diff --git a/android/vendor/tms/apps/SdtDiagnose/script/log/sky_log_tr069_logcat.sh b/android/vendor/tms/apps/SdtDiagnose/script/log/sky_log_tr069_logcat.sh
+new file mode 100755
+index 0000000..518d93d
+--- /dev/null
++++ b/android/vendor/tms/apps/SdtDiagnose/script/log/sky_log_tr069_logcat.sh
+@@ -0,0 +1,47 @@
++#! /system/bin/sh
++#script_desc=this is shell script for catch logcat
++
++# logcat store dir
++LOGCAT_DIR_NAME=/data/tcpdump
++# logcat per file size(10M)
++LOGCAT_PER_FILE_SIZE=10240
++# logcat max file count(10)
++LOGCAT_MAX_FILE_COUNT=10
++
++mkdir -p $LOGCAT_DIR_NAME
++file_name=$LOGCAT_DIR_NAME/logcat.log
++
++touch $file_name
++chgrp system $file_name
++chmod 0666 $file_name
++logcat *:w -vtime -n $LOGCAT_MAX_FILE_COUNT -r $LOGCAT_PER_FILE_SIZE -f $file_name &
++
++while true; do
++	chgrp system $file_name*
++	chmod 0666 $file_name*
++	sleep 60
++done
++
++
++# while :
++# do
++	# sleep 30
++	# source_files=$(ls $file_name.*)
++	# for source_file in ${source_files[@]}
++	# do
++		# if [[ $source_file == *.tar ]];then
++			# echo no need to tar
++		# else 
++			# echo need to tar $source_file
++			# local target_file=$LOGCAT_DIR_NAME/logcat_`date +%Y%m%d-%H%M%S`.tar
++			# tar -zcf $target_file $source_file
++			# rm -rf $source_file
++		# fi
++		# sleep 3
++	# done
++	# local current_file_count=$(ls -l $LOGCAT_DIR_NAME/*.tar | grep "^-" | wc -l)
++	# if [ $current_file_count -gt $LOGCAT_MAX_FILE_COUNT ]; then
++		# local first_file_name=`echo $(ls -rt $LOGCAT_DIR_NAME/*.tar) | awk '{print $1}'`
++		# rm -rf $first_file_name
++	# fi
++# done
+diff --git a/android/vendor/tms/apps/SdtDiagnose/script/tr069_script.sh b/android/vendor/tms/apps/SdtDiagnose/script/tr069_script.sh
+new file mode 100755
+index 0000000..c2631a1
+--- /dev/null
++++ b/android/vendor/tms/apps/SdtDiagnose/script/tr069_script.sh
+@@ -0,0 +1,41 @@
++#!/bin/bash
++echo tr069_script boot
++
++log_scripts_path=/system_ext/etc/skyscripts/log/
++script=sky_log_tr069_logcat.sh
++
++sh $log_scripts_path$script &
++
++while true; do
++	echo tr069_script running
++	sleep 60
++done
++
++# # function catch log
++# function catch_log {
++# 	local script_list=${command_param//,/ }
++# 	for script in ${script_list[@]}; do
++#		sh $log_scripts_path$script &
++# 	done
++# 	while true; do
++# 		echo tr069_script running
++# 		sleep 60
++# 	done
++# }
++
++# # read command and param
++# log_command=$(cat /mnt/skyinfo/tr069_command)
++# for cmd in ${log_command[@]}; do
++# 	if [[ $cmd == command_name* ]];then
++# 		command_name=${cmd//command_name=/}
++# 	elif [[ $cmd == command_param* ]];then
++# 		command_param=${cmd//command_param=/}
++# 	fi
++# done
++
++# if [ "catch_log" == $command_name ]; then
++# 	echo catch log
++# 	catch_log
++# else
++# 	echo nothing
++# fi
+diff --git a/android/vendor/tms/apps/SdtLauncher/Android.mk b/android/vendor/tms/apps/SdtLauncher/Android.mk
+new file mode 100755
+index 0000000..3f76d1b
+--- /dev/null
++++ b/android/vendor/tms/apps/SdtLauncher/Android.mk
+@@ -0,0 +1,23 @@
++LOCAL_PATH := $(my-dir)
++
++include $(CLEAR_VARS)
++LOCAL_MODULE := SdtLauncher
++LOCAL_SRC_FILES := $(LOCAL_MODULE).apk
++LOCAL_MODULE_CLASS := APPS
++LOCAL_MODULE_SUFFIX := .apk
++LOCAL_MODULE_TARGET_ARCH := arm
++LOCAL_CERTIFICATE := platform
++LOCAL_VENDOR_MODULE := false
++LOCAL_PRIVILEGED_MODULE := true
++include $(BUILD_PREBUILT)
++
++include $(CLEAR_VARS)
++LOCAL_MODULE := CMSLauncherProxy
++LOCAL_SRC_FILES := $(LOCAL_MODULE).apk
++LOCAL_MODULE_CLASS := APPS
++LOCAL_MODULE_SUFFIX := .apk
++LOCAL_MODULE_TARGET_ARCH := arm
++LOCAL_CERTIFICATE := platform
++LOCAL_VENDOR_MODULE := false
++LOCAL_PRIVILEGED_MODULE := false
++include $(BUILD_PREBUILT)
+\ No newline at end of file
+diff --git a/android/vendor/tms/apps/SdtLauncher/CMSLauncherProxy.apk b/android/vendor/tms/apps/SdtLauncher/CMSLauncherProxy.apk
+new file mode 100755
+index 0000000..5c51315
+--- /dev/null
++++ b/android/vendor/tms/apps/SdtLauncher/CMSLauncherProxy.apk
+@@ -0,0 +1,3 @@
++version https://git-lfs.github.com/spec/v1
++oid sha256:01aaf226815941149945480858b754b2e5b382301e232fdd25614ad223273134
++size 7340525
+diff --git a/android/vendor/tms/apps/SdtLauncher/SdtLauncher.apk b/android/vendor/tms/apps/SdtLauncher/SdtLauncher.apk
+new file mode 100755
+index 0000000..de00310
+--- /dev/null
++++ b/android/vendor/tms/apps/SdtLauncher/SdtLauncher.apk
+@@ -0,0 +1,3 @@
++version https://git-lfs.github.com/spec/v1
++oid sha256:d47300a24ed71a0f95f4dc9e6f0ec1ea2a8ac0a8687dce6d4e81f38609bc1293
++size 34443349
+diff --git a/android/vendor/tms/apps/SdtLogTools/SdtLogTools.apk b/android/vendor/tms/apps/SdtLogTools/SdtLogTools.apk
+new file mode 100755
+index 0000000..948f326
+--- /dev/null
++++ b/android/vendor/tms/apps/SdtLogTools/SdtLogTools.apk
+@@ -0,0 +1,3 @@
++version https://git-lfs.github.com/spec/v1
++oid sha256:18d4b620ee6e15a37665d7a7d33f976f8c265bd4b22d80293560a620debc20de
++size 6432535
+diff --git a/android/vendor/tms/apps/SdtLogTools/script/init.skyworth.skyscripts.rc b/android/vendor/tms/apps/SdtLogTools/script/init.skyworth.skyscripts.rc
+new file mode 100755
+index 0000000..767e2e1
+--- /dev/null
++++ b/android/vendor/tms/apps/SdtLogTools/script/init.skyworth.skyscripts.rc
+@@ -0,0 +1,10 @@
++service sky_script /system/bin/sh /system/etc/skyscripts/sky_script.sh
++    class core
++    user root
++    group root shell log readproc cache everybody system
++	seclabel u:r:sky_script:s0
++    oneshot
++
++on post-fs-data
++	start sky_script
++
+diff --git a/android/vendor/tms/apps/SdtLogTools/script/log/sky_log_tr069_logcat.sh b/android/vendor/tms/apps/SdtLogTools/script/log/sky_log_tr069_logcat.sh
+new file mode 100755
+index 0000000..e2c00b2
+--- /dev/null
++++ b/android/vendor/tms/apps/SdtLogTools/script/log/sky_log_tr069_logcat.sh
+@@ -0,0 +1,39 @@
++#! /system/bin/sh
++#script_desc=this is shell script for catch logcat
++
++# logcat store dir
++LOGCAT_DIR_NAME=data/tcpdump/
++# logcat per file size(10M)
++LOGCAT_PER_FILE_SIZE=10240
++# logcat max file count(10)
++LOGCAT_MAX_FILE_COUNT=1
++
++mkdir -p $LOGCAT_DIR_NAME
++file_name=$LOGCAT_DIR_NAME/logcat.log
++touch system $file_name
++chgrp system $file_name
++chmod 0666 $file_name
++logcat *:w -vtime -n $LOGCAT_MAX_FILE_COUNT -r $LOGCAT_PER_FILE_SIZE -f $file_name &
++
++# while :
++# do
++	# sleep 30
++	# source_files=$(ls $file_name.*)
++	# for source_file in ${source_files[@]}
++	# do
++		# if [[ $source_file == *.tar ]];then
++			# echo no need to tar
++		# else 
++			# echo need to tar $source_file
++			# local target_file=$LOGCAT_DIR_NAME/logcat_`date +%Y%m%d-%H%M%S`.tar
++			# tar -zcf $target_file $source_file
++			# rm -rf $source_file
++		# fi
++		# sleep 3
++	# done
++	# local current_file_count=$(ls -l $LOGCAT_DIR_NAME/*.tar | grep "^-" | wc -l)
++	# if [ $current_file_count -gt $LOGCAT_MAX_FILE_COUNT ]; then
++		# local first_file_name=`echo $(ls -rt $LOGCAT_DIR_NAME/*.tar) | awk '{print $1}'`
++		# rm -rf $first_file_name
++	# fi
++# done
+diff --git a/android/vendor/tms/apps/SdtLogTools/script/sky_script.sh b/android/vendor/tms/apps/SdtLogTools/script/sky_script.sh
+new file mode 100755
+index 0000000..bd5dbac
+--- /dev/null
++++ b/android/vendor/tms/apps/SdtLogTools/script/sky_script.sh
+@@ -0,0 +1,73 @@
++#!/bin/bash
++echo sky_script boot
++
++log_scripts_path=system/etc/skyscripts/log/
++log_internal_path=data/cache/log/
++log_internal_path_anr=data/anr/*
++log_internal_path_tombstones=data/tombstones/*
++log_external_path=logtools/
++log_external_path_anr=logtools/log/anr/
++log_external_path_tombstones=logtools/log/tombstones/
++
++# function catch log
++function catch_log {
++	mkdir -p $log_internal_path
++	local script_list=${command_param//,/ }
++	for script in ${script_list[@]}; do
++		sh $log_scripts_path$script &
++	done
++	while true; do
++		echo sky_script running
++		sleep 60
++	done
++}
++
++# function export log
++function export_log {
++	am broadcast -a com.skw.script.log.EXPORT_START
++	# copy log file
++	local export_path=$command_param/$log_external_path
++	mkdir -p $export_path
++	cp -r $log_internal_path $export_path
++	# copy anr file
++	local export_path_anr=$command_param/$log_external_path_anr
++	mkdir -p $export_path_anr
++	cp -r $log_internal_path_anr $export_path_anr
++	# copy tombstones file
++	local export_path_tombstones=$command_param/$log_external_path_tombstones
++	mkdir -p $export_path_tombstones
++	cp -r $log_internal_path_tombstones $export_path_tombstones
++	# execute sync
++	sync
++	am broadcast -a com.skw.script.log.EXPORT_FINISH
++}
++
++# function clear log
++function clear_log {
++	am broadcast -a com.skw.script.log.CLEAR_START
++	rm -rf $log_internal_path/*
++	am broadcast -a com.skw.script.log.CLEAR_FINISH
++}
++
++# read command and param
++log_command=$(cat /mnt/skyinfo/log_command)
++for cmd in ${log_command[@]}; do
++	if [[ $cmd == command_name* ]];then
++		command_name=${cmd//command_name=/}
++	elif [[ $cmd == command_param* ]];then
++		command_param=${cmd//command_param=/}
++	fi
++done
++
++if [ "catch_log" == $command_name ]; then
++	echo catch log
++	catch_log
++elif [ "export_log" == $command_name ]; then
++	echo export log
++	export_log
++elif [ "clear_log" == $command_name ]; then
++	echo clear log
++	clear_log
++else
++	echo nothing
++fi
+diff --git a/android/vendor/tms/apps/SdtTr069.apk b/android/vendor/tms/apps/SdtTr069.apk
+new file mode 100755
+index 0000000..b0a975d
+--- /dev/null
++++ b/android/vendor/tms/apps/SdtTr069.apk
+@@ -0,0 +1,3 @@
++version https://git-lfs.github.com/spec/v1
++oid sha256:910b32451ab25a21ba5b0146f89e22ecf1367a47d1b1861d358fc91ceb338b53
++size 7047624
+diff --git a/android/vendor/tms/apps/SdtUpdate.apk b/android/vendor/tms/apps/SdtUpdate.apk
+new file mode 100755
+index 0000000..9bc0ed9
+--- /dev/null
++++ b/android/vendor/tms/apps/SdtUpdate.apk
+@@ -0,0 +1,3 @@
++version https://git-lfs.github.com/spec/v1
++oid sha256:f6de90f7750c61b7624a9c8b3f5cfa15b6017a7cabeb184480277c6353f0fd7a
++size 6867446
+diff --git a/android/vendor/tms/etc/Android.mk b/android/vendor/tms/etc/Android.mk
+new file mode 100755
+index 0000000..1d4ec7f
+--- /dev/null
++++ b/android/vendor/tms/etc/Android.mk
+@@ -0,0 +1 @@
++include $(call all-subdir-makefiles)
+\ No newline at end of file
+diff --git a/android/vendor/tms/etc/permissions/privapp-permissions-tms-system.xml b/android/vendor/tms/etc/permissions/privapp-permissions-tms-system.xml
+new file mode 100755
+index 0000000..d5a2b88
+--- /dev/null
++++ b/android/vendor/tms/etc/permissions/privapp-permissions-tms-system.xml
+@@ -0,0 +1,34 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++  ~ Copyright (C) 2017 The Android Open Source Project
++  ~
++  ~ Licensed under the Apache License, Version 2.0 (the "License");
++  ~ you may not use this file except in compliance with the License.
++  ~ You may obtain a copy of the License at
++  ~
++  ~      http://www.apache.org/licenses/LICENSE-2.0
++  ~
++  ~ Unless required by applicable law or agreed to in writing, software
++  ~ distributed under the License is distributed on an "AS IS" BASIS,
++  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++  ~ See the License for the specific language governing permissions and
++  ~ limitations under the License
++  -->
++
++<!--
++This XML file declares which signature|privileged permissions should be granted to privileged
++applications in /system on GMS or Google-branded devices.
++It allows additional grants on top of privapp-permissions-platform.xml
++-->
++<permissions>
++    <privapp-permissions package="com.sdt.ota">
++        <permission name="android.permission.READ_PRIVILEGED_PHONE_STATE"/>
++        <permission name="android.permission.RECOVERY"/>
++        <permission name="android.permission.REBOOT"/>
++        <permission name="android.permission.ACCESS_CACHE_FILESYSTEM"/>
++        <permission name="android.permission.DELETE_CACHE_FILES"/>
++        <permission name="android.permission.START_ACTIVITIES_FROM_BACKGROUND"/>
++        <permission name="android.permission.SCHEDULE_EXACT_ALARM"/>
++        <permission name="android.permission.INSTALL_PACKAGE_UPDATES"/>
++    </privapp-permissions>
++</permissions>
+diff --git a/android/vendor/tms/etc/permissions/sdt_collect_permissions.xml b/android/vendor/tms/etc/permissions/sdt_collect_permissions.xml
+new file mode 100755
+index 0000000..11a5ca0
+--- /dev/null
++++ b/android/vendor/tms/etc/permissions/sdt_collect_permissions.xml
+@@ -0,0 +1,32 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++  ~ Copyright (C) 2017 The Android Open Source Project
++  ~
++  ~ Licensed under the Apache License, Version 2.0 (the "License");
++  ~ you may not use this file except in compliance with the License.
++  ~ You may obtain a copy of the License at
++  ~
++  ~      http://www.apache.org/licenses/LICENSE-2.0
++  ~
++  ~ Unless required by applicable law or agreed to in writing, software
++  ~ distributed under the License is distributed on an "AS IS" BASIS,
++  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++  ~ See the License for the specific language governing permissions and
++  ~ limitations under the License
++  -->
++
++<!--
++This XML file declares which signature|privileged permissions should be granted to privileged
++applications on Sky devices.
++It allows additional grants on top of privapp-permissions-platform.xml
++-->
++<permissions>
++    <privapp-permissions package="com.sdt.collect">
++		<permission name="android.permission.READ_PRIVILEGED_PHONE_STATE"/>
++		<permission name="android.permission.DUMP"/>
++		<permission name="android.permission.START_ACTIVITIES_FROM_BACKGROUND"/>
++		<permission name="android.permission.READ_LOGS"/>
++		<permission name="android.permission.PACKAGE_USAGE_STATS"/>
++		<permission name="android.permission.TRIGGER_SHELL_BUGREPORT"/>
++    </privapp-permissions>
++</permissions>
+diff --git a/android/vendor/tms/etc/permissions/sdt_launcher_permissions.xml b/android/vendor/tms/etc/permissions/sdt_launcher_permissions.xml
+new file mode 100755
+index 0000000..8b3bd87
+--- /dev/null
++++ b/android/vendor/tms/etc/permissions/sdt_launcher_permissions.xml
+@@ -0,0 +1,29 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++  ~ Copyright (C) 2017 The Android Open Source Project
++  ~
++  ~ Licensed under the Apache License, Version 2.0 (the "License");
++  ~ you may not use this file except in compliance with the License.
++  ~ You may obtain a copy of the License at
++  ~
++  ~      http://www.apache.org/licenses/LICENSE-2.0
++  ~
++  ~ Unless required by applicable law or agreed to in writing, software
++  ~ distributed under the License is distributed on an "AS IS" BASIS,
++  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++  ~ See the License for the specific language governing permissions and
++  ~ limitations under the License
++  -->
++
++<!--
++This XML file declares which signature|privileged permissions should be granted to privileged
++applications on Sky devices.
++It allows additional grants on top of privapp-permissions-platform.xml
++-->
++<permissions>
++    <privapp-permissions package="com.sdt.launcher">
++        <permission name="android.permission.ACCESS_NOTIFICATIONS"/>
++        <permission name="android.permission.CHANGE_HDMI_CEC_ACTIVE_SOURCE"/>
++        <permission name="com.android.providers.tv.permission.ACCESS_ALL_EPG_DATA" />
++    </privapp-permissions>
++</permissions>
+diff --git a/android/vendor/tms/etc/sysconfig/config.properties b/android/vendor/tms/etc/sysconfig/config.properties
+new file mode 100755
+index 0000000..8c69810
+--- /dev/null
++++ b/android/vendor/tms/etc/sysconfig/config.properties
+@@ -0,0 +1,124 @@
++# https://topvcloud-hk.itvg.cn
++tms_url=https://api-eurdemo.itvguide.cn
++tms_operator_name=StarTV
++tms_tr069_port=38086
++tms_ota_port=30906
++tms_cert_port=18443
++tms_secret_key_port=17443
++tms_launcher_port=30908
++tms_collect_port=38889
++
++######## start SkyCoreService.apk 的配置项 #########
++# <optional> 样机指纹前缀,用以更改上报给服务器的指纹信息
++#tms_proto_flag=
++# <optional>
++#tms_certs_config=/vendor/etc/skyconfig/certs/certs_config.xml
++# <optional> 设备上报的默认重复时间. 30M 30 * 60 * 1000
++#report_failed_delay=1800000
++# <optional> 请求证书的长循环时间. 30M: 30 * 60 * 1000
++#cert_long_request_delay=1800000
++# <optional> 请求证书的短循环时间. 3M: 3 * 60 * 1000
++#cert_short_request_delay=180000
++# <optional>
++#device_enable_unified_refresh=true
++# <optional>
++#device_enable_global_key=true
++# <optional>
++# device_enable_burn_key=true
++# <optional>
++#device_burn_key_list=[{"name":"cmc_ca_preset_0","triggerType":"boot","burnWay":"unify","updatable":true},\
++# {"name":"PlayreadyPrivateKey","triggerType":"boot","burnWay":"provision","updatable":false},\
++# {"name":"PlayreadyPublicKey","triggerType":"boot","burnWay":"provision","updatable":false},\
++# {"name":"AttestationKey","triggerType":"boot","burnWay":"provision","updatable":false},\
++# {"name":"MGKID","triggerType":"boot","burnWay":"provision","updatable":true,"interval":8},\
++# {"name":"region_code","triggerType":"boot","burnWay":"unify","updatable":false},\
++# {"name":"Hdcp22Key","triggerType":"both","burnWay":"provision","updatable":false}]
++######## end SkyCoreService.apk 的配置项 #########
++
++######## start SkwAtvCollect.apk 的配置项 #########
++collect_list={\
++"infos":[{"name": "playReady","enable": true,"interval": 10},\
++  {"name": "emmcModel","enable": false},\
++  {"name": "emmcLifecycle","enable": false}],\
++"warnings":[{"name": "CPU_Temp_High","enable": false,"interval": 1,"warningValue": 10,"warningInterval": 10}],\
++"events":[{"name": "appInstallation","enable": false}]\
++}
++######## end SkwAtvCollect.apk 的配置项 #########
++
++######## start SdtTr069 的配置项 #########
++tms_tr069_path=/acs/69999
++######## end SdtTr069 的配置项 #########
++
++#
++# 系统通用配置文件/vendor/etc/skyconfig/config.properties，请遵循以下规范
++#
++# 1.仅支持key=value的格式，key不能为空，value默认可以为空；
++# 2.支持list数据，如key=a;b;c ，数据用英文输入法的分号隔开
++# 3.key不要换行，value数据可以换行，但是不能使用enter键换行，只能用换行符 " \",必须在上一行末尾加" \"，再换行；
++# 4.所有的key禁止重名，确保key的唯一性，避免相同key的数据被覆盖,全局key名字加上“global_”的前缀，app单独的key加上app_应用名_keyname；
++# 5.规定此文件中的配置项，正式使用后，只能新增和修改value，不允许remove和修改key的命名，所以添加时请规范命名key；
++# 6.
++# 7.
++# 8.
++## 添加配置项请按照备注，请在对应的区域添加。
++## 不同模块或者不同apk， 按照以下备注方式 start-end 之间简单划分区域
++#
++# 提供maven库供apk开发调用，获取一下数据
++#
++# maven库的使用方法：
++#1. implementation 'com.skyworthdigital.config:helper:1.0.3-20201106141154-SNAPSHOT' 以最新版本为准
++#2. 主要的api有，这里的key对应此文档中的key：
++#   Config.getString(Context ctx, String key) 
++#   Config.getInt(Context ctx, String key)
++#   Config.getBoolean(Context ctx, String key)
++#   Config.getLong(Context ctx, String key)
++#   Config.getStringArray(Context ctx, String key)
++#
++#3.apk申请权限 
++#<uses-permission android:name="sky.permission.READ_CONFIG" />
++#<uses-permission android:name="sky.permission.WRITE_CONFIG" />
++#
++#4.确认SkyCustomizationConfiguration.apk的版本不低于1.0.5(包含)
++#
++#
++
++##
++######## start global 配置项 #########
++
++######## end global 配置项 #########
++
++######## start SkyBluetoothRcuPair.apk 的配置项 #########
++RCU_NAME_SKYBOX=SKYBOX_0120;SKYBOX_0150;SKYBOX_0151;RemoteB016;SKYBOX_A150N;SKYBOX_A171N;RemoteG10
++DEVICE_MAC=54:03:84;28:31:7E
++CHECK_RSSI_RCU_NAME=SKYBOX_0150;SKYBOX_A150N;SKYBOX_A171N
++CAN_BE_COVERED=false
++LOWBATTERY=20
++######## end SkyBluetoothRcuPair.apk 的配置项 #########
++
++######## start SkyRemoteControlOTA.apk 的配置项 #########
++NANOSIC_BLE_RCU_MAC=54:03:84;28:31:7E
++UEI_BLE_RCU_MAC=8c:3A:7E
++NANOSIC_RCU_TYPE=nanosic_rcu
++UEI_RCU_TYPE=uei_rcu
++######## end SkyRemoteControlOTA.apk 的配置项 #########
++
++######## start skycertstorageservice.apk #########
++bind_cert_whitelist=com.skyworthdigital.autotest;com.skyworthdigital.producttest;com.skyworthdigital.stb.cloud.certtest;com.skyworthdigital.cloud.resetcert;com.skyworthdigital.cert.manager
++######## end skycertstorageservice.apk #########
++
++######## start SdtSystemServer.apk 的配置项 #########
++cpu_temperature_warning_threshold=95
++cpu_temperature_warning_period_ms=120000
++cpu_temperature_warning_enable=true
++wakeup_regularly_enable=false
++######## end SdtSystemServer.apk 的配置项 #########
++
++######## start SdtFrontPanelLedsService.apk #########
++LED_IR_CONTROL=false
++######## end SdtFrontPanelLedsService.apk #########
++
++######## start xxx_3.apk 的配置项 #########
++
++######## end xxx_3.apk 的配置项 #########
++
++
+diff --git a/android/vendor/tms/patch/20230213_SWMD-577.patch b/android/vendor/tms/patch/20230213_SWMD-577.patch
+new file mode 100755
+index 0000000..5cad3ed
+--- /dev/null
++++ b/android/vendor/tms/patch/20230213_SWMD-577.patch
+@@ -0,0 +1,15 @@
++diff --git a/frameworks/base/core/java/android/app/usage/NetworkStatsManager.java b/frameworks/base/core/java/android/app/usage/NetworkStatsManager.java
++index 8a6c85d5489..1f6e49fdd9f 100644
++--- a/frameworks/base/core/java/android/app/usage/NetworkStatsManager.java
+++++ b/frameworks/base/core/java/android/app/usage/NetworkStatsManager.java
++@@ -674,6 +674,10 @@ public class NetworkStatsManager {
++                         : NetworkTemplate.buildTemplateWifi(NetworkTemplate.WIFI_NETWORKID_ALL,
++                                 subscriberId);
++                 break;
+++            // SWMD-577: Add statistical Ethernet usage interface
+++            case ConnectivityManager.TYPE_ETHERNET:
+++                template = NetworkTemplate.buildTemplateEthernet();
+++                break;
++             default:
++                 throw new IllegalArgumentException("Cannot create template for network type "
++                         + networkType + ", subscriberId '"
+diff --git a/android/vendor/tms/patch/20230301_SWMD-639.patch b/android/vendor/tms/patch/20230301_SWMD-639.patch
+new file mode 100755
+index 0000000..e6c7f5e
+--- /dev/null
++++ b/android/vendor/tms/patch/20230301_SWMD-639.patch
+@@ -0,0 +1,36 @@
++From 93a76f919eedf6dd29636362ab23b018612f16fe Mon Sep 17 00:00:00 2001
++From: lintong <lintong@skyworth.com>
++Date: Wed, 01 Mar 2023 14:10:49 +0800
++Subject: [PATCH] [SWMD-639][E2E]增加盒子在CMS Lock状态下允许响应的按键
++
++Change-Id: I93a4025cbd6162d25d685896ccd13aed9c1e5aea
++---
++
++diff --git a/frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java b/frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
++index f5c1ca4..17572d4 100644
++--- a/frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+++++ b/frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
++@@ -3429,6 +3429,23 @@
++             return 0;
++         }
++ 
+++        // When the STB is locked, only the below keys can be used, and other keys are forbidden.
+++        // Add by skyworth Outis, 2023/3/1
+++        if (SystemProperties.get("persist.sys.tr069.lock").equals("1")
+++                && keyCode != KeyEvent.KEYCODE_POWER && keyCode != KeyEvent.KEYCODE_DPAD_CENTER
+++                && keyCode != KeyEvent.KEYCODE_DPAD_LEFT && keyCode != KeyEvent.KEYCODE_DPAD_RIGHT
+++                && keyCode != KeyEvent.KEYCODE_DPAD_UP && keyCode != KeyEvent.KEYCODE_DPAD_DOWN
+++                && keyCode != KeyEvent.KEYCODE_BACK && keyCode != KeyEvent.KEYCODE_VOLUME_MUTE
+++                && keyCode != KeyEvent.KEYCODE_VOLUME_UP && keyCode != KeyEvent.KEYCODE_VOLUME_DOWN
+++                && keyCode != KeyEvent.KEYCODE_0 && keyCode != KeyEvent.KEYCODE_1
+++                && keyCode != KeyEvent.KEYCODE_2 && keyCode != KeyEvent.KEYCODE_3
+++                && keyCode != KeyEvent.KEYCODE_4 && keyCode != KeyEvent.KEYCODE_5
+++                && keyCode != KeyEvent.KEYCODE_6 && keyCode != KeyEvent.KEYCODE_7
+++                && keyCode != KeyEvent.KEYCODE_8 && keyCode != KeyEvent.KEYCODE_9) {
+++            Log.e(TAG, "The set-top box is locked. This key cannot be used. keycode: " + keyCode);
+++            return 0;
+++        }
+++
++         final boolean interactive = (policyFlags & FLAG_INTERACTIVE) != 0;
++         final boolean canceled = event.isCanceled();
++         final int displayId = event.getDisplayId();
+diff --git a/android/vendor/tms/patch/20230319_SWMD-693.patch b/android/vendor/tms/patch/20230319_SWMD-693.patch
+new file mode 100755
+index 0000000..fd4f95c
+--- /dev/null
++++ b/android/vendor/tms/patch/20230319_SWMD-693.patch
+@@ -0,0 +1,181 @@
++diff --git a/frameworks/base/services/core/java/com/android/server/pm/PackageManagerShellCommand.java b/frameworks/base/services/core/java/com/android/server/pm/PackageManagerShellCommand.java
++index 1aa80a953d6..97ce92a58c9 100644
++--- a/frameworks/base/services/core/java/com/android/server/pm/PackageManagerShellCommand.java
+++++ b/frameworks/base/services/core/java/com/android/server/pm/PackageManagerShellCommand.java
++@@ -1338,6 +1338,16 @@ class PackageManagerShellCommand extends ShellCommand {
++             }
++         }
++ 
+++        /* SWMD-693/SWMD-694: Blacklist and whitelist functions required by TMS */
+++        String pkgName = (params.installerPackageName != null) ? params.installerPackageName : params.sessionParams.appPackageName;
+++        if (!isSdtCMSAllowedToInstall(pkgName)) {
+++            Slog.w(TAG, "TMS - Activity{" + pkgName + "} Installation is prohibited!");
+++            pw.println("Error: This application has been added to the blacklist and " +
+++                    "is prohibited from being installed or opened.");
+++            return 1;
+++        }
+++        /* SWMD-693/SWMD-694 end */
+++
++         final int sessionId = doCreateSession(params.sessionParams,
++                 params.installerPackageName, params.userId);
++         boolean abandonSession = true;
++@@ -1375,6 +1385,59 @@ class PackageManagerShellCommand extends ShellCommand {
++         }
++     }
++ 
+++    /**
+++     * SWMD-693/SWMD-694: Blacklist and whitelist functions required by TMS
+++     *
+++     * It is necessary to determine whether the application exists on the blacklist or is not
+++     * on the whitelist. The content of the blacklist and whitelist depends on the TMS.
+++     *
+++     * @param activityPkgName The package name required to detect whether it can be installed.
+++     * @return true or false. Is the application allowed to install
+++     */
+++    private boolean isSdtCMSAllowedToInstall(String activityPkgName) {
+++        if (activityPkgName == null)
+++            return true;
+++
+++        boolean isWhiteListPkg = true;
+++        int numPackages = SystemProperties.getInt("persist.sys.tr069.whitelist.number", 0);
+++        if (numPackages <= 0) {
+++            numPackages = SystemProperties.getInt("persist.sys.tr069.blacklist.number", 0);
+++            if (numPackages <= 0) {
+++                return true;
+++            }
+++            isWhiteListPkg = false;
+++        }
+++
+++        ArrayList<String> packageNames = new ArrayList<>();
+++        for (int i = 1; i <= numPackages; ++i) {
+++            String packageList = "";
+++            if (isWhiteListPkg) {
+++                packageList = SystemProperties.get("persist.sys.tr069.whitelist.part" + i, "");
+++            } else {
+++                packageList = SystemProperties.get("persist.sys.tr069.blacklist.part" + i, "");
+++            }
+++
+++            if (!packageList.isEmpty()) {
+++                packageList = packageList.substring(1, packageList.length() - 1).replaceAll("\"", "");
+++                String[] array = packageList.split(",");
+++                Collections.addAll(packageNames, array);
+++            }
+++        }
+++
+++        if (packageNames.isEmpty()) {
+++            return true;
+++        }
+++
+++        if (isWhiteListPkg && !packageNames.contains(activityPkgName)) {
+++            return false;
+++        } else if (!isWhiteListPkg && packageNames.contains(activityPkgName)) {
+++            return false;
+++        }
+++
+++        return true;
+++    }
+++    /* SWMD-693/SWMD-694 end */
+++
++     private int doWaitForStagedSessionReady(int sessionId, long timeoutMs, PrintWriter pw)
++               throws RemoteException {
++         Preconditions.checkArgument(timeoutMs > 0);
++diff --git a/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java b/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java
++index 8f600af91f6..86cb936b370 100644
++--- a/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java
+++++ b/frameworks/base/services/core/java/com/android/server/wm/ActivityStarter.java
++@@ -103,6 +103,7 @@ import android.os.Bundle;
++ import android.os.IBinder;
++ import android.os.Process;
++ import android.os.RemoteException;
+++import android.os.SystemProperties;
++ import android.os.Trace;
++ import android.os.UserHandle;
++ import android.os.UserManager;
++@@ -128,6 +129,8 @@ import com.android.server.wm.LaunchParamsController.LaunchParams;
++ 
++ import java.io.PrintWriter;
++ import java.text.DateFormat;
+++import java.util.ArrayList;
+++import java.util.Collections;
++ import java.util.Date;
++ 
++ /**
++@@ -863,6 +866,17 @@ class ActivityStarter {
++                     + "} from uid " + callingUid);
++         }
++ 
+++        /* SWMD-693/SWMD-694: Blacklist and whitelist functions required by TMS */
+++        if (intent != null && intent.getComponent() != null) {
+++            String activityPkgName = intent.getComponent().getPackageName();
+++            if (!isSdtCMSAllowedToStart(activityPkgName, aInfo.applicationInfo.isSystemApp())) {
+++                Slog.w(TAG, "TMS - Activity{" + activityPkgName + "} Starting is prohibited!");
+++                err = ActivityManager.START_PERMISSION_DENIED;
+++                return err;
+++            }
+++        }
+++        /* SWMD-693/SWMD-694 end */
+++
++         ActivityRecord sourceRecord = null;
++         ActivityRecord resultRecord = null;
++         if (resultTo != null) {
++@@ -1188,6 +1202,60 @@ class ActivityStarter {
++         return mLastStartActivityResult;
++     }
++ 
+++    /**
+++     * SWMD-693/SWMD-694: Blacklist and whitelist functions required by TMS
+++     *
+++     * It is necessary to determine whether the application exists on the blacklist or is not
+++     * on the whitelist. The content of the blacklist and whitelist depends on the TMS.
+++     *
+++     * @param activityPkgName The package name required to detect whether it can be started.
+++     * @param isSystemApp Is this application a system application
+++     * @return true or false. Is the application allowed to start
+++     */
+++    private boolean isSdtCMSAllowedToStart(String activityPkgName, boolean isSystemApp) {
+++        if (activityPkgName == null)
+++            return true;
+++
+++        boolean isWhiteListPkg = true;
+++        int numPackages = SystemProperties.getInt("persist.sys.tr069.whitelist.number", 0);
+++        if (numPackages <= 0) {
+++            numPackages = SystemProperties.getInt("persist.sys.tr069.blacklist.number", 0);
+++            if (numPackages <= 0) {
+++                return true;
+++            }
+++            isWhiteListPkg = false;
+++        }
+++
+++        ArrayList<String> packageNames = new ArrayList<>();
+++        for (int i = 1; i <= numPackages; ++i) {
+++            String packageList = "";
+++            if (isWhiteListPkg) {
+++                packageList = SystemProperties.get("persist.sys.tr069.whitelist.part" + i, "");
+++            } else {
+++                packageList = SystemProperties.get("persist.sys.tr069.blacklist.part" + i, "");
+++            }
+++
+++            if (!packageList.isEmpty()) {
+++                packageList = packageList.substring(1, packageList.length() - 1).replaceAll("\"", "");
+++                String[] array = packageList.split(",");
+++                Collections.addAll(packageNames, array);
+++            }
+++        }
+++
+++        if (packageNames.isEmpty()) {
+++            return true;
+++        }
+++
+++        if (isWhiteListPkg && !isSystemApp && !packageNames.contains(activityPkgName)) {
+++            return false;
+++        } else if (!isWhiteListPkg && packageNames.contains(activityPkgName)) {
+++            return false;
+++        }
+++
+++        return true;
+++    }
+++    /* Skyworth end */
+++
++     /**
++      * Return true if background activity is really aborted.
++      *
+diff --git a/android/vendor/tms/patch/SdtAtvCollect/20221117_SWMSOF-3103.patch b/android/vendor/tms/patch/SdtAtvCollect/20221117_SWMSOF-3103.patch
+new file mode 100755
+index 0000000..6ac6bb2
+--- /dev/null
++++ b/android/vendor/tms/patch/SdtAtvCollect/20221117_SWMSOF-3103.patch
+@@ -0,0 +1,134 @@
++diff --git a/frameworks/base/packages/Shell/src/com/android/shell/BugreportProgressService.java b/frameworks/base/packages/Shell/src/com/android/shell/BugreportProgressService.java
++index 8c7011253c8..aac22caf9f0 100644
++--- a/frameworks/base/packages/Shell/src/com/android/shell/BugreportProgressService.java
+++++ b/frameworks/base/packages/Shell/src/com/android/shell/BugreportProgressService.java
++@@ -260,6 +260,13 @@ public class BugreportProgressService extends Service {
++     private boolean mIsWatch;
++     private boolean mIsTv;
++ 
+++    /* SWMSOF-3103: The box information collection function requires receiving a BugReport*/
+++    private String mSdtBugreportPath = "";
+++    public static final String EXTRA_SDT_PATH="sdt.intent.extra.PATH";
+++    public static String INTENT_SDT_BUGREPORT_FINISH = "sdt.intent.action.BUGREPORT_FINISH";
+++    public static String INTENT_SDT_BUGREPORT_ERROR = "sdt.intent.action.BUGREPORT_ERROR";
+++    /* SWMSOF-3103 end*/
+++
++     @Override
++     public void onCreate() {
++         mContext = getApplicationContext();
++@@ -298,6 +305,9 @@ public class BugreportProgressService extends Service {
++             if (!intent.hasExtra(EXTRA_ORIGINAL_INTENT) && !intent.hasExtra(EXTRA_ID)) {
++                 return START_NOT_STICKY;
++             }
+++            /* SWMSOF-3103 */
+++            mSdtBugreportPath = intent.getStringExtra(EXTRA_SDT_PATH);
+++            /* SWMSOF-3103 end*/
++             // Handle it in a separate thread.
++             final Message msg = mServiceHandler.obtainMessage();
++             msg.what = MSG_SERVICE_COMMAND;
++@@ -372,6 +382,9 @@ public class BugreportProgressService extends Service {
++                 stopProgressLocked(mInfo.id);
++                 mInfo.deleteEmptyFiles();
++             }
+++            /* SWMSOF-3103 */
+++            reportBySdt();
+++            /* SWMSOF-3103 end*/
++             Log.e(TAG, "Bugreport API callback onError() errorCode = " + errorCode);
++             return;
++         }
++@@ -423,9 +436,71 @@ public class BugreportProgressService extends Service {
++                 intent.putExtra(EXTRA_SCREENSHOT, getScreenshotForIntent(mInfo));
++                 mContext.sendBroadcast(intent, android.Manifest.permission.DUMP);
++                 onBugreportFinished(mInfo);
+++
+++                /* SWMSOF-3103 end*/
+++                reportBySdt();
+++                /* SWMSOF-3103 end*/
+++            }
+++        }
+++    }
+++
+++    /* SWMSOF-3103 */
+++    private void reportBySdt(){
+++        Log.w(TAG,"sendBugreport:" + mSdtBugreportPath);
+++        if(!TextUtils.isEmpty(mSdtBugreportPath)){
+++            startBugreportStorage(mInfo.bugreportFile);
+++        } else {
+++            resetSdtInfo();
+++        }
+++    }
+++    private void resetSdtInfo(){
+++        mSdtBugreportPath = "";
+++    }
+++    private void startBugreportStorage(File file){
+++        Log.d(TAG, "============startBugreportStorage start= ================file:"+file.getAbsolutePath()+";mSdtBugreportPath:"+mSdtBugreportPath);
+++        InputStream is = null;
+++        FileOutputStream os = null;
+++        try {
+++            is = new FileInputStream(file);
+++            int length = is.available();
+++            os = new FileOutputStream(mSdtBugreportPath);
+++            byte[] buf = new byte[length+100];
+++            int byteRead=-1;
+++            while ((byteRead=is.read(buf))!=-1){
+++                os.write(buf,0,byteRead);
+++            }
+++            sendSdtBugreportBroadcast(INTENT_SDT_BUGREPORT_FINISH);
+++        } catch (Exception e) {
+++            e.printStackTrace();
+++            sendSdtBugreportBroadcast(INTENT_SDT_BUGREPORT_ERROR);
+++        } finally{
+++            if (os != null){
+++                try {
+++                    os.flush();
+++                    os.close();
+++                } catch (Exception e) {
+++                    e.printStackTrace();
+++                }
+++            }
+++            if (is != null){
+++                try {
+++                    is.close();
+++                } catch (Exception e) {
+++                    e.printStackTrace();
+++                }
++             }
++         }
+++        Log.d(TAG, "============startBugreportStorage end=================");
+++    }
+++    private void sendSdtBugreportBroadcast(String action){
+++        Log.d(TAG, "=======sendSdtBugreportBroadcast======action:"+action);
+++        Intent intent = new Intent();
+++        intent.setAction(action);
+++        intent.putExtra(EXTRA_BUGREPORT, mSdtBugreportPath);
+++        mContext.sendBroadcast(intent, android.Manifest.permission.DUMP);
+++        resetSdtInfo();
++     }
+++    /* SWMSOF-3103 end*/
++ 
++     private static void sendRemoteBugreportFinishedBroadcast(Context context,
++             String bugreportFileName, File bugreportFile) {
++diff --git a/frameworks/base/packages/Shell/src/com/android/shell/BugreportRequestedReceiver.java b/frameworks/base/packages/Shell/src/com/android/shell/BugreportRequestedReceiver.java
++index da919bef638..4ecb7e70625 100644
++--- a/frameworks/base/packages/Shell/src/com/android/shell/BugreportRequestedReceiver.java
+++++ b/frameworks/base/packages/Shell/src/com/android/shell/BugreportRequestedReceiver.java
++@@ -17,6 +17,9 @@
++ package com.android.shell;
++ 
++ import static com.android.shell.BugreportProgressService.EXTRA_ORIGINAL_INTENT;
+++/* SWMSOF-3103 */
+++import static com.android.shell.BugreportProgressService.EXTRA_SDT_PATH;
+++/* SWMSOF-3103 end*/
++ import static com.android.shell.BugreportProgressService.dumpIntent;
++ 
++ import android.annotation.RequiresPermission;
++@@ -42,6 +45,9 @@ public class BugreportRequestedReceiver extends BroadcastReceiver {
++         Log.d(TAG, "onReceive() ACTION: " + serviceIntent.getAction());
++         serviceIntent.setAction(intent.getAction());
++         serviceIntent.putExtra(EXTRA_ORIGINAL_INTENT, intent);
+++        /* SWMSOF-3103 */
+++        serviceIntent.putExtra(EXTRA_SDT_PATH,intent.getStringExtra(EXTRA_SDT_PATH));
+++        /* SWMSOF-3103 end*/
++         context.startService(serviceIntent);
++     }
++ }
+diff --git a/android/vendor/tms/products/tms.mk b/android/vendor/tms/products/tms.mk
+new file mode 100755
+index 0000000..7dbd3c9
+--- /dev/null
++++ b/android/vendor/tms/products/tms.mk
+@@ -0,0 +1,43 @@
++SK_CMS_LAUNCHER := cms
++
++PRODUCT_PACKAGES := \
++    SdtCoreService \
++    SdtDiagnose \
++    SdtTr069
++
++PRODUCT_PACKAGES += SdtUpdate
++
++# Configuration files for TMS apps
++PRODUCT_COPY_FILES += vendor/tms/etc/permissions/privapp-permissions-tms-system.xml:$(PRODUCT_OUT)/system/etc/permissions/privapp-permissions-tms.xml
++
++#PRODUCT_COPY_FILES += \
++#    vendor/tms/sepolicy/certs/cacert.pem:$(PRODUCT_OUT)/vendor/etc/security/certs/cacert.pem \
++#    vendor/tms/sepolicy/certs/clientcert.pem:$(PRODUCT_OUT)/vendor/etc/security/certs/clientcert.pem \
++#    vendor/tms/sepolicy/certs/clientkey.pem:$(PRODUCT_OUT)/vendor/etc/security/certs/clientkey.pem \
++
++#PRODUCT_COPY_FILES += vendor/tms/etc/sysconfig/config.properties:$(PRODUCT_OUT)/vendor/etc/skyconfig/config.properties
++
++### Sdt launcher app ###
++ifneq ($(SK_CMS_LAUNCHER),atv)
++PRODUCT_PACKAGES +=	\
++    SdtLauncher \
++    CMSLauncherProxy
++PRODUCT_COPY_FILES += vendor/tms/etc/permissions/sdt_launcher_permissions.xml:$(TARGET_COPY_OUT_SYSTEM)/etc/permissions/sdt_launcher_permissions.xml
++endif
++
++ifneq ($(SK_CMS_LAUNCHER),cms)
++PRODUCT_PACKAGES += TVLauncher
++endif
++### SdtLauncher end ###
++
++### Sdt collect box info app ###
++ifeq ($(SK_SUPPORT_COLLECT),true)
++PRODUCT_COPY_FILES += vendor/tms/etc/permissions/sdt_collect_permissions.xml:$(TARGET_COPY_OUT_SYSTEM_EXT)/etc/permissions/sdt_collect_permissions.xml
++BOARD_VENDOR_SEPOLICY_DIRS += vendor/tms/apps/SdtAtvCollect/sepolicy
++PRODUCT_PACKAGES += SdtAtvCollect
++endif
++### SdtAtvCollect end ###
++
++# TMS apps additional sepolicy
++BOARD_VENDOR_SEPOLICY_DIRS += vendor/tms/sepolicy
++PRODUCT_PROPERTY_OVERRIDES += ro.vendor.platform.skycloud.operatorId=21
+\ No newline at end of file
+diff --git a/android/vendor/tms/sepolicy/certs/cacert.pem b/android/vendor/tms/sepolicy/certs/cacert.pem
+new file mode 100755
+index 0000000..e09bcdd
+--- /dev/null
++++ b/android/vendor/tms/sepolicy/certs/cacert.pem
+@@ -0,0 +1,21 @@
++-----BEGIN CERTIFICATE-----
++MIIDXTCCAkWgAwIBAgIJAPIkTTofA50zMA0GCSqGSIb3DQEBCwUAMEQxCzAJBgNV
++BAYTAkNOMREwDwYDVQQIDAhzaGVuemhlbjERMA8GA1UECgwIc2t5d29ydGgxDzAN
++BgNVBAMMBlJvb3RDQTAgFw0yMDA5MjQwMjAzMzVaGA8yMTIwMDgzMTAyMDMzNVow
++RDELMAkGA1UEBhMCQ04xETAPBgNVBAgMCHNoZW56aGVuMREwDwYDVQQKDAhza3l3
++b3J0aDEPMA0GA1UEAwwGUm9vdENBMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIB
++CgKCAQEA4K6JRE6pE8aoey+8HL4pFno84bIJHZo3Gfg0SUlqinOc6vgWzHaHBV5+
++/RiQuvy2OCFFhunSk6XD2zdyHLn1b/KlKAyA6+6GEw1h1G+Tt4K4PJOnglChMlcQ
++dUllOzLRhoaCxvWkh7fa62EAziLhJ+hHdSIgplOzz91IL/Dg/KaxsctzKi4WhE0W
++5ilnhnSbtGU4aWlEV4jI3wMCJA2QY5746sOFYkP/OiL713IKLDzUw+RqmjPIvpe/
++2ZKXwec2d0LEOmkiyVcIERBhocbs6/MtTCBMZR1zLCgaHxwBXiERF0uElba91Ip9
++9Pzx7A9rJlhySvR9xV+dIn/i5DcluQIDAQABo1AwTjAdBgNVHQ4EFgQUwfDCgMKw
++v2ZqphGAR8GuYyiGsvgwHwYDVR0jBBgwFoAUwfDCgMKwv2ZqphGAR8GuYyiGsvgw
++DAYDVR0TBAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAKAxgyN93HedvMw0DjkJO
++mmi0SUypMe2zsKlYT1yzucV5Phc0R/LOZR8Tqb7OfUE0SiGlFaXDD8G0KNNlOYY0
++7Sz0YfC9SNU3IUq+DpO/dXgUUE3xiYofuGkyPxN+RF0JFxSjkewxxEXZzc6jDa1d
++c1Rq3jrqwQ8/4pPlUg2nCmE3zzaFzfdUyK6vVKGegizetx8MNN/L3MItWCPiIwmt
++4rfJ/UUfL2DXqe9KXFotV4jXRsyzbA7CjKp7dPsGJ/v3IIegSyNjHSsSgWTiEt/L
++C3qUJp6giF5yWN1Njs0Q/x0FyMfu6zFfP4fmSQnQGXgEa8Sw+O+y+Yf6vu1RoTO3
++Yw==
++-----END CERTIFICATE-----
+diff --git a/android/vendor/tms/sepolicy/certs/clientcert.pem b/android/vendor/tms/sepolicy/certs/clientcert.pem
+new file mode 100755
+index 0000000..247ed50
+--- /dev/null
++++ b/android/vendor/tms/sepolicy/certs/clientcert.pem
+@@ -0,0 +1,80 @@
++Certificate:
++    Data:
++        Version: 3 (0x2)
++        Serial Number: 3 (0x3)
++    Signature Algorithm: sha256WithRSAEncryption
++        Issuer: C=CN, ST=shenzhen, O=skyworth, CN=RootCA
++        Validity
++            Not Before: Sep 24 02:29:52 2020 GMT
++            Not After : Aug 31 02:29:52 2120 GMT
++        Subject: C=CN, ST=shenzhen, O=skyworth, CN=Client
++        Subject Public Key Info:
++            Public Key Algorithm: rsaEncryption
++                Public-Key: (2048 bit)
++                Modulus:
++                    00:c2:e1:ae:1f:f9:0b:aa:b1:95:da:00:1d:69:72:
++                    57:04:da:d7:9d:c3:2f:29:58:c0:df:0d:89:17:92:
++                    d7:b2:fc:29:ba:a3:72:87:63:2c:39:d2:24:c9:5f:
++                    14:c8:3e:c3:28:30:1c:9d:bc:6d:2a:f7:e3:09:d5:
++                    79:81:6b:2e:a3:15:a5:56:52:24:c6:e9:0f:6d:fc:
++                    6a:f2:44:37:8d:e0:9a:fc:2e:51:bc:ba:9f:29:31:
++                    5a:84:65:4e:70:0d:e6:cb:be:54:18:33:10:8c:3a:
++                    8b:68:73:7e:d5:10:a0:3b:90:26:6e:b5:4b:5b:c0:
++                    40:71:ea:5e:fc:bf:46:a1:52:fa:51:78:ff:53:6b:
++                    10:20:24:82:55:f8:d4:5c:1b:bb:5f:4c:a2:de:52:
++                    ae:25:7f:98:7c:a1:95:75:fb:eb:1a:f2:38:8d:fc:
++                    6b:b1:88:f0:87:24:73:6e:e7:5e:78:9a:ed:91:0c:
++                    9a:86:e3:36:46:4a:83:0c:df:18:83:44:c5:cc:fe:
++                    17:6b:d3:bb:6c:90:a4:17:a8:10:9c:c2:0c:8c:ed:
++                    f3:59:4d:f6:b9:7f:a8:4f:a7:cf:1c:7f:41:dc:b5:
++                    0a:ab:42:3d:99:11:e0:95:3b:41:9a:44:cb:3f:20:
++                    99:d1:64:36:d2:5f:c0:53:dc:ad:6f:61:44:52:d2:
++                    87:05
++                Exponent: 65537 (0x10001)
++        X509v3 extensions:
++            X509v3 Basic Constraints: 
++                CA:FALSE
++            Netscape Comment: 
++                OpenSSL Generated Certificate
++            X509v3 Subject Key Identifier: 
++                84:B5:9F:21:11:E6:73:6D:E5:33:39:FE:25:93:4C:DF:92:29:75:51
++            X509v3 Authority Key Identifier: 
++                keyid:C1:F0:C2:80:C2:B0:BF:66:6A:A6:11:80:47:C1:AE:63:28:86:B2:F8
++
++    Signature Algorithm: sha256WithRSAEncryption
++         69:b6:20:2b:dd:17:90:fc:e9:e2:69:e1:ce:0b:3e:14:5f:dc:
++         0a:9f:fa:09:cb:d9:f3:f9:7e:1a:90:d8:3f:2b:e4:6d:68:d4:
++         b6:f5:58:5c:ad:09:dd:ae:1e:42:ba:c2:47:97:67:cb:a3:df:
++         94:5d:d0:cc:03:b4:ee:c2:79:dd:b2:4d:e1:a4:74:d4:22:d7:
++         b0:b7:18:b2:93:74:26:5c:58:19:4d:5e:c9:36:86:f2:fb:51:
++         62:2c:64:fa:cb:c2:eb:92:29:51:7b:9c:c0:ef:03:d1:79:38:
++         42:66:b7:f8:0e:4e:70:9d:a3:c2:a2:11:b2:2b:b5:08:f0:6e:
++         d9:d2:0c:0c:01:80:7b:f8:38:db:68:4e:2d:b2:22:19:b0:28:
++         27:8a:c0:4b:e1:81:fe:a1:11:fd:18:fb:da:ec:ef:4d:bb:78:
++         bd:6b:fd:55:73:87:48:b3:4d:5d:ce:d3:30:31:d0:d6:a1:ab:
++         26:67:c7:54:54:9a:13:5d:54:32:f9:7c:8f:fd:98:10:69:c1:
++         5d:bc:c5:52:51:bb:05:6e:0d:ac:b3:3e:04:c1:cc:0d:63:34:
++         9e:26:a5:e5:57:66:29:ac:08:40:9b:1e:0c:d1:0a:40:47:f7:
++         2c:49:f8:0c:7c:13:49:ca:1c:4b:c5:14:8a:ce:89:cf:f3:dd:
++         9b:c7:62:ac
++-----BEGIN CERTIFICATE-----
++MIIDgDCCAmigAwIBAgIBAzANBgkqhkiG9w0BAQsFADBEMQswCQYDVQQGEwJDTjER
++MA8GA1UECAwIc2hlbnpoZW4xETAPBgNVBAoMCHNreXdvcnRoMQ8wDQYDVQQDDAZS
++b290Q0EwIBcNMjAwOTI0MDIyOTUyWhgPMjEyMDA4MzEwMjI5NTJaMEQxCzAJBgNV
++BAYTAkNOMREwDwYDVQQIDAhzaGVuemhlbjERMA8GA1UECgwIc2t5d29ydGgxDzAN
++BgNVBAMMBkNsaWVudDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAMLh
++rh/5C6qxldoAHWlyVwTa153DLylYwN8NiReS17L8KbqjcodjLDnSJMlfFMg+wygw
++HJ28bSr34wnVeYFrLqMVpVZSJMbpD238avJEN43gmvwuUby6nykxWoRlTnAN5su+
++VBgzEIw6i2hzftUQoDuQJm61S1vAQHHqXvy/RqFS+lF4/1NrECAkglX41Fwbu19M
++ot5SriV/mHyhlXX76xryOI38a7GI8Ickc27nXnia7ZEMmobjNkZKgwzfGINExcz+
++F2vTu2yQpBeoEJzCDIzt81lN9rl/qE+nzxx/Qdy1CqtCPZkR4JU7QZpEyz8gmdFk
++NtJfwFPcrW9hRFLShwUCAwEAAaN7MHkwCQYDVR0TBAIwADAsBglghkgBhvhCAQ0E
++HxYdT3BlblNTTCBHZW5lcmF0ZWQgQ2VydGlmaWNhdGUwHQYDVR0OBBYEFIS1nyER
++5nNt5TM5/iWTTN+SKXVRMB8GA1UdIwQYMBaAFMHwwoDCsL9maqYRgEfBrmMohrL4
++MA0GCSqGSIb3DQEBCwUAA4IBAQBptiAr3ReQ/OniaeHOCz4UX9wKn/oJy9nz+X4a
++kNg/K+RtaNS29VhcrQndrh5CusJHl2fLo9+UXdDMA7Tuwnndsk3hpHTUItewtxiy
++k3QmXFgZTV7JNoby+1FiLGT6y8LrkilRe5zA7wPReThCZrf4Dk5wnaPCohGyK7UI
++8G7Z0gwMAYB7+DjbaE4tsiIZsCgnisBL4YH+oRH9GPva7O9Nu3i9a/1Vc4dIs01d
++ztMwMdDWoasmZ8dUVJoTXVQy+XyP/ZgQacFdvMVSUbsFbg2ssz4EwcwNYzSeJqXl
++V2YprAhAmx4M0QpAR/csSfgMfBNJyhxLxRSKzonP892bx2Ks
++-----END CERTIFICATE-----
+diff --git a/android/vendor/tms/sepolicy/certs/clientkey.pem b/android/vendor/tms/sepolicy/certs/clientkey.pem
+new file mode 100755
+index 0000000..59a488f
+--- /dev/null
++++ b/android/vendor/tms/sepolicy/certs/clientkey.pem
+@@ -0,0 +1,27 @@
++-----BEGIN RSA PRIVATE KEY-----
++MIIEowIBAAKCAQEAwuGuH/kLqrGV2gAdaXJXBNrXncMvKVjA3w2JF5LXsvwpuqNy
++h2MsOdIkyV8UyD7DKDAcnbxtKvfjCdV5gWsuoxWlVlIkxukPbfxq8kQ3jeCa/C5R
++vLqfKTFahGVOcA3my75UGDMQjDqLaHN+1RCgO5AmbrVLW8BAcepe/L9GoVL6UXj/
++U2sQICSCVfjUXBu7X0yi3lKuJX+YfKGVdfvrGvI4jfxrsYjwhyRzbudeeJrtkQya
++huM2RkqDDN8Yg0TFzP4Xa9O7bJCkF6gQnMIMjO3zWU32uX+oT6fPHH9B3LUKq0I9
++mRHglTtBmkTLPyCZ0WQ20l/AU9ytb2FEUtKHBQIDAQABAoIBAQCCKTGfcTt1mn63
++x/PdBd1RBMmWOVM6jmjjkarK7+zZQsqsOZa5DmfvhofDZ5n91M2L/fZe9AcF9+LQ
++IqCw6+GOU1rGuL6PjAIeN8VGYoGoZSee32EAaLT9UlVesDsfZGmOE2UfdJvMzR1n
++ehxwOlaK8dB5iOT4NwPUEfG3ZhnKjPB8HNQxifyXnzO3/CiBUBcPpxwwDix+My4F
++SE/vxG6c13JBeGe3Nt++lVVUa2yTMbMR2MPoOWImEnbBiJR4iYPMYg1F+RnKkgch
++xIRCpNKno96Xg3U4X9RcA5MzmvK/HVSUKg0Vig9z+5Ot5817BUZ3X/xHYf47GaB7
++Utl+D2iBAoGBAP49itYzmVmv/5/T4l81cU1eKScfvEwda35QmF4LBfH2punGqLGm
++RvhJdno4iDZzwDBKLnoTYgQe2WubP9WKWH+YDTrlh0UpEm1hZw3ZGk1TDij20Upd
++upbWaC7s92z9ZBEUivXbJu36kpOkJObe/VnxNEx5DF2ZMkDiGNbqAQTdAoGBAMQ6
++95YsTH66R9zUA5lnLspdgjTXoOgxlNCAc3zxtTRwIBS7nVExy7goCKwee2kP7gyt
++tV0/DEJSjaCaQuP8g5WYQsEDX0ukTFnryAdgt0XhAlqQs5MYD8LG/K1EhpnuT7am
++X9+GMsjhemKH2Tj5lfz3GVGjDNftLJEoaYBsZHRJAoGAAVicEpRFXJc0+Eir6ysi
++RXGZMC7X1WNWfV254M2YI3bV3WkC3aXuvEPPT8ha2Eb2norWAil2HGV5aztwNBY+
++b7aDY2txsukLwu6AGC+tFvm4mnjsFMO4SDIsbQsuKDKTRA/iyHh3lUz9V7DHzT0j
++BEXlq/38FcbI4FUSIpksljUCgYAHihR1KqKNw+5655Jz1GkR0WHtUdOW2EDVefn1
++9Pt3Vk+FPGgg9H7VRoR+yHUJZllJF2t+d6uq6K0UXJjxVYRgvQbjj5ObvmZIliyL
++TAX+o1SJ0kF0B1qjqy2OIrHhPCzH4cCRQAC3gyJGot2PuNcwbvYEEvWtXil2Mk1L
++Z968MQKBgAcYDRdk79GNNi5IMOtsB+LyEjCSWYal0G9jddq6wirsd6AGNCMU3UNV
++7d7xSiQdBSXNQcklCCrLmadhX0RDU0f6giB/AIrrz4vc06huj9rLAgwHto/J9ovd
++j1LOyqMCEVm1zgXGLqubKK4xrL4sBDOH+wkKuKHIuG5e+jD2ikeo
++-----END RSA PRIVATE KEY-----
+diff --git a/android/vendor/tms/sepolicy/file.te b/android/vendor/tms/sepolicy/file.te
+new file mode 100755
+index 0000000..e2abca6
+--- /dev/null
++++ b/android/vendor/tms/sepolicy/file.te
+@@ -0,0 +1 @@
++type tcpdump_file, file_type, data_file_type, core_data_file_type;
+diff --git a/android/vendor/tms/sepolicy/file_contexts b/android/vendor/tms/sepolicy/file_contexts
+new file mode 100755
+index 0000000..fd8ebc5
+--- /dev/null
++++ b/android/vendor/tms/sepolicy/file_contexts
+@@ -0,0 +1,3 @@
++
++/system_ext/etc/skyscripts/*.sh 	u:object_r:sky_script_exec:s0
++/data/tcpdump(/.*)?             u:object_r:tcpdump_file:s0
+diff --git a/android/vendor/tms/sepolicy/init.te b/android/vendor/tms/sepolicy/init.te
+new file mode 100755
+index 0000000..2608597
+--- /dev/null
++++ b/android/vendor/tms/sepolicy/init.te
+@@ -0,0 +1,4 @@
++
++allow init tcpdump_file:file { create_file_perms };
++allow init tcpdump_file:dir { create_dir_perms ioctl };
++allowxperm init tcpdump_file:dir ioctl { SK_TCPDUMP_IOC_CMD1 SK_TCPDUMP_IOC_CMD2 };
+diff --git a/android/vendor/tms/sepolicy/ioctl_defines b/android/vendor/tms/sepolicy/ioctl_defines
+new file mode 100755
+index 0000000..e92ebf6
+--- /dev/null
++++ b/android/vendor/tms/sepolicy/ioctl_defines
+@@ -0,0 +1,4 @@
++
++#skyworth tcmdump
++define(`SK_TCPDUMP_IOC_CMD1', `0x00006613')
++define(`SK_TCPDUMP_IOC_CMD2', `0x00006615')
+\ No newline at end of file
+diff --git a/android/vendor/tms/sepolicy/netd.te b/android/vendor/tms/sepolicy/netd.te
+new file mode 100755
+index 0000000..cb587ee
+--- /dev/null
++++ b/android/vendor/tms/sepolicy/netd.te
+@@ -0,0 +1,13 @@
++
++domain_auto_trans(init, tcpdump_exec, netd)
++
++allow tcpdump_file labeledfs:filesystem { associate };
++allow netd tcpdump_exec:file { entrypoint };
++allow netd tcpdump_file:dir { rw_dir_perms };
++allow netd tcpdump_file:file { create_file_perms };
++allow netd self:unix_dgram_socket { ioctl };
++allowxperm netd self:unix_dgram_socket ioctl { SIOCGIFFLAGS SIOCETHTOOL SIOCBONDINFOQUERY };
++allow netd self:packet_socket { create bind getopt setopt map read write ioctl};
++allowxperm netd self:packet_socket ioctl { SIOCBONDINFOQUERY SIOCGIFINDEX SIOCGIWMODE SIOCETHTOOL SIOCGIFHWADDR SIOCGIWNAME};
++allow netd netd:netlink_generic_socket {ioctl };
++allowxperm netd self:netlink_generic_socket ioctl { SIOCGIFNAME SIOCETHTOOL};
+\ No newline at end of file
+diff --git a/android/vendor/tms/sepolicy/sky_scripts.te b/android/vendor/tms/sepolicy/sky_scripts.te
+new file mode 100755
+index 0000000..8686f2f
+--- /dev/null
++++ b/android/vendor/tms/sepolicy/sky_scripts.te
+@@ -0,0 +1,35 @@
++type sky_script, domain, coredomain;
++type sky_script_exec,file_type,exec_type,system_file_type;
++init_daemon_domain(sky_script)
++
++allow sky_script shell_exec:file { map entrypoint read getattr execute open execute_no_trans };
++allow sky_script toolbox_exec:file { map getattr execute read open execute_no_trans };
++allow sky_script logcat_exec:file { map getattr execute read open execute_no_trans };
++allow sky_script cache_file:dir { create rw_dir_perms rmdir };
++allow sky_script cache_file:file { create rw_file_perms unlink };
++allow sky_script kmsg_device:chr_file { read open };
++allow sky_script kernel:system { syslog_read syslog_mod };
++allow sky_script logdr_socket:sock_file { write };
++allow sky_script logd:unix_stream_socket { connectto };
++allow sky_script self:capability2 { syslog };
++allow sky_script fuse:dir { search write add_name create read open };
++allow sky_script fuse:file { create read write open };
++allow sky_script mnt_user_file:dir { search };
++allow sky_script skyinfo_file:dir { search };
++allow sky_script skyinfo_file:file { read open write };
++allow sky_script system_file:file { execute_no_trans };
++allow sky_script servicemanager:binder { call };
++allow sky_script system_server:binder { call transfer };
++allow system_server sky_script:binder { call };
++allow sky_script activity_service:service_manager { find };
++allow sky_script proc_stat:file { read open };
++allow sky_script sysfs_thermal:file { read open };
++allow sky_script anr_data_file:dir { getattr read open search };
++allow sky_script anr_data_file:file { getattr read open };
++allow sky_script tombstone_data_file:dir { getattr read open search };
++allow sky_script tombstone_data_file:file { getattr read open };
++allow sky_script tcpdump_file:dir { search read open write add_name getattr remove_name };
++allow sky_script tcpdump_file:file { create getattr setattr read open append ioctl write unlink rename };
++allowxperm sky_script tcpdump_file:file ioctl { F2FS_IOC_SET_PIN_FILE };
++allow sky_script self:capability { sys_nice };
++allow sky_script rootfs:dir { read open };
+\ No newline at end of file
+diff --git a/android/vendor/tms/sepolicy/system_app.te b/android/vendor/tms/sepolicy/system_app.te
+new file mode 100755
+index 0000000..3ee15c1
+--- /dev/null
++++ b/android/vendor/tms/sepolicy/system_app.te
+@@ -0,0 +1,3 @@
++
++allow system_app tcpdump_file:file { create_file_perms };
++allow system_app tcpdump_file:dir { rw_dir_perms };
+\ No newline at end of file

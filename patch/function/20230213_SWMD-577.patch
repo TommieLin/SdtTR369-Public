@@ -1,0 +1,15 @@
+diff --git a/frameworks/base/core/java/android/app/usage/NetworkStatsManager.java b/frameworks/base/core/java/android/app/usage/NetworkStatsManager.java
+index 8a6c85d5489..1f6e49fdd9f 100644
+--- a/frameworks/base/core/java/android/app/usage/NetworkStatsManager.java
++++ b/frameworks/base/core/java/android/app/usage/NetworkStatsManager.java
+@@ -674,6 +674,10 @@ public class NetworkStatsManager {
+                         : NetworkTemplate.buildTemplateWifi(NetworkTemplate.WIFI_NETWORKID_ALL,
+                                 subscriberId);
+                 break;
++            // SWMD-577: Add statistical Ethernet usage interface
++            case ConnectivityManager.TYPE_ETHERNET:
++                template = NetworkTemplate.buildTemplateEthernet();
++                break;
+             default:
+                 throw new IllegalArgumentException("Cannot create template for network type "
+                         + networkType + ", subscriberId '"

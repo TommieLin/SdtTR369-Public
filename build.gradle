@@ -1,0 +1,18 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+plugins {
+    id 'com.android.application' version '8.0.2' apply false
+    id 'com.android.library' version '8.0.2' apply false
+}
+
+allprojects {
+    String path = getRootDir().getAbsolutePath() + '/accessor/libs/framework.jar'
+    gradle.projectsEvaluated {
+        tasks.withType(JavaCompile) {
+            options.compilerArgs << '-Xbootclasspath/p:' + path
+        }
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}

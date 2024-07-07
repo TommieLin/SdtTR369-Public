@@ -1,0 +1,87 @@
+diff --git a/frameworks/base/services/core/java/com/android/server/pm/PackageManagerService.java b/frameworks/base/services/core/java/com/android/server/pm/PackageManagerService.java
+index c6ed5682c14..674b18633ce 100644
+--- a/frameworks/base/services/core/java/com/android/server/pm/PackageManagerService.java
++++ b/frameworks/base/services/core/java/com/android/server/pm/PackageManagerService.java
+@@ -19825,6 +19825,54 @@ public class PackageManagerService extends IPackageManager.Stub
+         ApplicationPackageManager.invalidateGetPackagesForUidCache();
+     }
+ 
++    /* SWMD-1093: Blacklist and whitelist functions required by Skyworth TMS */
++    private static final int TMS_FIREWALL_TYPE_UNDEFINED = 0;
++    private static final int TMS_FIREWALL_TYPE_WHITELIST = 1;
++    private static final int TMS_FIREWALL_TYPE_BLACKLIST = 2;
++    private static final String PROP_TMS_APP_FIREWALL_TYPE = "persist.sys.tms.app.firewall.type";
++    private static final String PROP_TMS_APP_FIREWALL_NUM = "persist.sys.tms.app.firewall.number";
++    private static final String PROP_TMS_APP_FIREWALL_PART = "persist.sys.tms.app.firewall.part";
++    /* SWMD-1093 end */
++
++    /**
++     * SWMD-1093: Blacklist and whitelist functions required by Skyworth TMS
++     *
++     * It is necessary to determine whether the application exists on the blacklist or is not
++     * on the whitelist. The content of the blacklist and whitelist depends on the TMS.
++     *
++     * @param firewallType The types of firewalls are divided into blacklist and whitelist.
++     * @param packageName The package name required to detect whether it can be installed.
++     * @return true or false. Is the application allowed to install
++     */
++    private boolean isSdtTMSAllowedToInstall(int firewallType, String packageName) {
++        if (packageName == null)
++            return false;
++
++        int numPropPart = SystemProperties.getInt(PROP_TMS_APP_FIREWALL_NUM, 0);
++        if (numPropPart <= 0) {
++            return firewallType != TMS_FIREWALL_TYPE_WHITELIST;
++        }
++
++        String packageList = "";
++        for (int i = 1; i <= numPropPart; ++i) {
++            String packageNames = SystemProperties.get(PROP_TMS_APP_FIREWALL_PART + i, "");
++            if (!packageNames.isEmpty()) {
++                packageList += packageNames;
++            }
++        }
++
++        if (firewallType == TMS_FIREWALL_TYPE_WHITELIST
++                && !packageList.contains(packageName)) {
++            return false;
++        } else if (firewallType == TMS_FIREWALL_TYPE_BLACKLIST
++                && packageList.contains(packageName)) {
++            return false;
++        }
++
++        return true;
++    }
++    /* SWMD-1093 end */
++
+     /**
+      * Installs one or more packages atomically. This operation is broken up into four phases:
+      * <ul>
+@@ -19909,6 +19957,27 @@ public class PackageManagerService extends IPackageManager.Stub
+                     request.installResult.setError("Scanning Failed.", e);
+                     return;
+                 }
++
++                /* SWMD-1093: Blacklist and whitelist functions required by Skyworth TMS */
++                int firewallType = SystemProperties.getInt(
++                        PROP_TMS_APP_FIREWALL_TYPE, TMS_FIREWALL_TYPE_UNDEFINED);
++                if (firewallType != TMS_FIREWALL_TYPE_UNDEFINED) {
++                    // Only non-system applications require restrictions.
++                    boolean systemApp = false;
++                    PackageSetting ps = mSettings.getPackageLPr(packageName);
++                    if (ps != null && ps.pkg != null) {
++                        systemApp = ps.pkg.isSystem();
++                    }
++                    if (!systemApp && !isSdtTMSAllowedToInstall(firewallType, packageName)) {
++                        String errMsg =
++                                "Installation of Package {" + packageName + "} is prohibited";
++                        request.installResult.setError(
++                                PackageManager.INSTALL_FAILED_INTERNAL_ERROR, errMsg);
++                        Slog.w(TAG, "TMS Warning: " + errMsg);
++                        return;
++                    }
++                }
++                /* SWMD-1093 end */
+             }
+             ReconcileRequest reconcileRequest = new ReconcileRequest(preparedScans, installArgs,
+                     installResults,

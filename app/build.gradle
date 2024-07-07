@@ -1,0 +1,141 @@
+plugins {
+    id 'com.android.application'
+}
+
+def gitShortVersion = 'git rev-parse --short HEAD'
+
+static def releaseTime() {
+    return new Date().format("yyyyMMddHHmmss", TimeZone.getTimeZone("GMT+08:00"))
+}
+
+android {
+    namespace 'com.sdt.android.tr369'
+    compileSdk 33
+    def apkName = "SdtTr369"
+    defaultConfig {
+        applicationId "com.sdt.android.tr369"
+        minSdk 31
+        targetSdk 33
+        manifestPlaceholders = [apkName : apkName]
+        versionCode 10008
+        versionName "1.0.8"
+        flavorDimensions "default"
+        ndk {
+            abiFilters 'armeabi-v7a'
+        }
+    }
+
+    signingConfigs {
+        aml_HP40AX2_config {
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+            storeFile file('../key/HP40AX2.keystore')
+            storePassword 'android'
+        }
+        SD_config {
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+            storeFile file('../key/SD.keystore')
+            storePassword 'android'
+        }
+        beidu_config {
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+            storeFile file('../key/taipei.keystore')
+            storePassword 'android'
+        }
+        aml_UnifyHybX2_config {
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+            storeFile file('../key/UnifyHybridX2.keystore')
+            storePassword 'android'
+        }
+        aml_UnifyHybX4_config {
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+            storeFile file('../key/UnifyHybridX4.keystore')
+            storePassword 'android'
+        }
+        rtk_HPR3A_1325_config {
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+            storeFile file('../key/HPR3A1325.keystore')
+            storePassword 'android'
+        }
+        aml_HP40AX2_TA_config {
+            keyAlias 'SkyTelecom'
+            keyPassword 'android'
+            storeFile file('../key/SkyTelecom.keystore')
+            storePassword 'android'
+        }
+    }
+
+    productFlavors {
+        HP40AX2 {
+            dimension "default"
+            signingConfig signingConfigs.aml_HP40AX2_config
+        }
+        SDX4 {
+            dimension "default"
+            signingConfig signingConfigs.SD_config
+        }
+        beiduX2 {
+            dimension "default"
+            signingConfig signingConfigs.beidu_config
+        }
+        HP40AX2_TA {
+            dimension "default"
+            signingConfig signingConfigs.aml_HP40AX2_TA_config
+        }
+        UnifyHybX4 {
+            dimension "default"
+            signingConfig signingConfigs.aml_UnifyHybX4_config
+        }
+        UnifyHybX2 {
+            dimension "default"
+            signingConfig signingConfigs.aml_UnifyHybX2_config
+        }
+        HPR3A1325 {
+            dimension "default"
+            signingConfig signingConfigs.rtk_HPR3A_1325_config
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig release.signingConfig
+        }
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    applicationVariants.all { variant ->
+        variant.outputs.all {
+            if (outputFile != null && outputFileName.endsWith('.apk')) {
+                outputFileName = apkName + "_" +
+                        variant.versionName + "_" +
+                        gitShortVersion.execute().text.trim() + "_" +
+                        releaseTime() + "_" +
+                        variant.buildType.name + ".apk"
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    compileOnly files('../accessor/libs/framework.jar')
+
+    implementation project(path: ':tr369')
+    implementation project(path: ':accessor')
+    implementation 'androidx.leanback:leanback:1.0.0'
+    implementation 'com.squareup.okhttp3:okhttp:4.9.1'
+    implementation 'com.google.code.gson:gson:2.8.6'
+
+}

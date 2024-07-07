@@ -1,0 +1,138 @@
+# Each line of this file contains either a comment (denoted by '#' at the start of the line)
+# or a USP data model parameter and its factory reset value.
+# The parameter and value are separated by whitespace.
+# The value may optionally be enclosed in speech marks "" (this is the only way to specify an empty string)
+#
+##########################################################################################################
+#
+# Adding MQTT parameters to test the datamodel interface
+#
+
+## EndpointID由ManufacturerOUI和SerialNumber决定，SerialNumber部分需要转换为12位的十六进制
+# Device.LocalAgent.EndpointID "os::${ManufacturerOUI}-${Hex(SerialNumber)}"
+
+### Adding boot params
+Device.LocalAgent.Controller.1.BootParameter.1.Enable "true"
+Device.LocalAgent.Controller.1.BootParameter.1.ParameterName "Device.LocalAgent.EndpointID"
+Device.LocalAgent.Controller.1.BootParameter.2.Enable "true"
+Device.LocalAgent.Controller.1.BootParameter.2.ParameterName "Device.DeviceInfo.SerialNumber"
+Device.LocalAgent.Controller.1.BootParameter.3.Enable "true"
+Device.LocalAgent.Controller.1.BootParameter.3.ParameterName "Device.DeviceInfo.ModelName"
+Device.LocalAgent.Controller.1.BootParameter.4.Enable "true"
+Device.LocalAgent.Controller.1.BootParameter.4.ParameterName "Device.DeviceInfo.Manufacturer"
+Device.LocalAgent.Controller.1.BootParameter.5.Enable "true"
+Device.LocalAgent.Controller.1.BootParameter.5.ParameterName "Device.DeviceInfo.SoftwareVersion"
+Device.LocalAgent.Controller.1.BootParameter.6.Enable "true"
+Device.LocalAgent.Controller.1.BootParameter.6.ParameterName "Device.DeviceInfo.HardwareVersion"
+Device.LocalAgent.Controller.1.BootParameter.7.Enable "true"
+Device.LocalAgent.Controller.1.BootParameter.7.ParameterName "Device.X_Skyworth.OperatorName"
+Device.LocalAgent.Controller.1.BootParameter.8.Enable "true"
+Device.LocalAgent.Controller.1.BootParameter.8.ParameterName "Device.X_Skyworth.Lock.Enable"
+Device.LocalAgent.Controller.1.BootParameter.9.Enable "true"
+Device.LocalAgent.Controller.1.BootParameter.9.ParameterName "Device.DeviceInfo.UpTime"
+Device.LocalAgent.Controller.1.BootParameter.10.Enable "true"
+Device.LocalAgent.Controller.1.BootParameter.10.ParameterName "Device.WiFi.SSID.1.MACAddress"
+Device.LocalAgent.Controller.1.BootParameter.11.Enable "true"
+Device.LocalAgent.Controller.1.BootParameter.11.ParameterName "Device.DeviceInfo.MemoryStatus.Free"
+Device.LocalAgent.Controller.1.BootParameter.12.Enable "true"
+Device.LocalAgent.Controller.1.BootParameter.12.ParameterName "Device.DeviceInfo.MemoryStatus.Total"
+Device.LocalAgent.Controller.1.BootParameter.13.Enable "true"
+Device.LocalAgent.Controller.1.BootParameter.13.ParameterName "Device.DeviceInfo.ProcessStatus.CPUUsage"
+Device.LocalAgent.Controller.1.BootParameter.14.Enable "true"
+Device.LocalAgent.Controller.1.BootParameter.14.ParameterName "Device.X_Skyworth.InternalDataStorageFree"
+Device.LocalAgent.Controller.1.BootParameter.15.Enable "true"
+Device.LocalAgent.Controller.1.BootParameter.15.ParameterName "Device.X_Skyworth.InternalDataStorageTotal"
+Device.LocalAgent.Controller.1.BootParameter.16.Enable "true"
+Device.LocalAgent.Controller.1.BootParameter.16.ParameterName "Device.X_Skyworth.DownlinkRate"
+Device.LocalAgent.Controller.1.BootParameter.17.Enable "true"
+Device.LocalAgent.Controller.1.BootParameter.17.ParameterName "Device.X_Skyworth.UplinkRate"
+Device.LocalAgent.Controller.1.BootParameter.18.Enable "true"
+Device.LocalAgent.Controller.1.BootParameter.18.ParameterName "Device.X_Skyworth.CpuTemperature"
+Device.LocalAgent.Controller.1.BootParameter.19.Enable "true"
+Device.LocalAgent.Controller.1.BootParameter.19.ParameterName "Device.DeviceInfo.Location.1.DataObject"
+
+Device.LocalAgent.Subscription.1.Alias "sdtcpe-1"
+Device.LocalAgent.Subscription.1.Enable "true"
+Device.LocalAgent.Subscription.1.ID "default-boot-event-ACS"
+Device.LocalAgent.Subscription.1.Recipient "Device.LocalAgent.Controller.1"
+Device.LocalAgent.Subscription.1.NotifType "Event"
+Device.LocalAgent.Subscription.1.ReferenceList "Device.Boot!"
+Device.LocalAgent.Subscription.1.Persistent "true"
+
+### MTP & MQTT configuration.
+Device.LocalAgent.MTP.1.Alias "cpe-1"
+Device.LocalAgent.MTP.1.Enable "true"
+Device.LocalAgent.MTP.1.Protocol "MQTT"
+Device.LocalAgent.MTP.1.MQTT.Reference "Device.MQTT.Client.1"
+Device.LocalAgent.MTP.1.MQTT.PublishQoS "2"
+## 根据每台设备独特的EndpointID动态初始化该节点值
+# Device.LocalAgent.MTP.1.MQTT.ResponseTopicConfigured "sdtcpe/agent/resptopic/${EndpointID}"
+
+## 根据项目环境动态配置MQTT服务器URL
+# Device.MQTT.Client.1.BrokerAddress "172.28.11.231"
+# Device.MQTT.Client.1.BrokerPort "8883"
+# Device.MQTT.Client.1.TransportProtocol "TLS"
+# Device.MQTT.Client.1.ClientID ""
+# Device.MQTT.Client.1.Username ""
+# Device.MQTT.Client.1.Password ""
+Device.MQTT.Client.1.ProtocolVersion "5.0"
+Device.MQTT.Client.1.Alias "cpe-1"
+Device.MQTT.Client.1.Enable "true"
+Device.MQTT.Client.1.KeepAliveTime "60"
+Device.MQTT.Client.1.ConnectRetryTime "5"
+Device.MQTT.Client.1.ConnectRetryIntervalMultiplier "2000"
+Device.MQTT.Client.1.ConnectRetryMaxInterval "600"
+
+### LocalAgent.Controller configuration.
+Device.LocalAgent.Controller.1.Alias "cpe-1"
+Device.LocalAgent.Controller.1.Enable "true"
+Device.LocalAgent.Controller.1.PeriodicNotifInterval "3600"
+Device.LocalAgent.Controller.1.PeriodicNotifTime "0001-01-01T00:00:00Z"
+Device.LocalAgent.Controller.1.ControllerCode ""
+Device.LocalAgent.Controller.1.AssignedRole "Device.LocalAgent.ControllerTrust.Role.1"
+Device.LocalAgent.Controller.1.EndpointID "self::sdtacs-ABC369"
+Device.LocalAgent.Controller.1.MTP.1.Alias "cpe-1"
+Device.LocalAgent.Controller.1.MTP.1.Enable "true"
+Device.LocalAgent.Controller.1.MTP.1.Protocol "MQTT"
+Device.LocalAgent.Controller.1.MTP.1.MQTT.Reference "Device.MQTT.Client.1"
+Device.LocalAgent.Controller.1.MTP.1.MQTT.Topic "sdtacs/tr369/mqttv5/report"
+
+### LocalAgent.ControllerTrust.Role configuration.
+Device.LocalAgent.ControllerTrust.Role.1.Alias "cpe-role-1"
+Device.LocalAgent.ControllerTrust.Role.1.Enable "true"
+Device.LocalAgent.ControllerTrust.Role.1.Name "Trust-Role-1"
+Device.LocalAgent.ControllerTrust.Role.1.Permission.1.Alias "cpe-permission-1"
+Device.LocalAgent.ControllerTrust.Role.1.Permission.1.Enable "true"
+Device.LocalAgent.ControllerTrust.Role.1.Permission.1.CommandEvent "rwxn"
+Device.LocalAgent.ControllerTrust.Role.1.Permission.1.InstantiatedObj "rwxn"
+Device.LocalAgent.ControllerTrust.Role.1.Permission.1.Obj "rwxn"
+Device.LocalAgent.ControllerTrust.Role.1.Permission.1.Param "rwxn"
+Device.LocalAgent.ControllerTrust.Role.1.Permission.1.Targets "Device."
+
+Internal.Reboot.Cause "LocalFactoryReset"
+
+### Add by Skyworth
+Device.DeviceInfo.ManufacturerOUI "309176"
+
+## Launcher短消息功能需要订阅的主题
+Device.MQTT.Client.1.Subscription.1.Alias "mqtt-shortmsg"
+Device.MQTT.Client.1.Subscription.1.Enable "true"
+## 根据每台设备独特的EndpointID动态初始化该节点值
+# Device.MQTT.Client.1.Subscription.1.Topic "sdtcpe/agent/shortmsg/${EndpointID}"
+Device.MQTT.Client.1.Subscription.1.QoS "2"
+
+## 新盒子锁的状态
+Device.X_Skyworth.Lock.Enable "0"
+
+## 平台软件默认不开启logcat后台持续保存日志功能，按项目需求打开或关闭
+Device.X_Skyworth.Logcat.Background.Enable "1"
+## 平台软件默认不开启logcat自动上传日志功能，按项目需求打开
+Device.X_Skyworth.Logcat.AutoUpload.Enable "0"
+
+## 位置信息相关参数
+Device.DeviceInfo.Location.1.Source "External"
+Device.DeviceInfo.Location.1.ExternalProtocol "CWMP"
+Device.DeviceInfo.Location.1.ExternalSource "https://ipinfo.io/json"
+Device.DeviceInfo.Location.1.DataObject ""
+Device.DeviceInfo.Location.1.AcquiredTime ""
+

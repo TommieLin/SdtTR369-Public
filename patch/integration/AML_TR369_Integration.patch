@@ -1,0 +1,346 @@
+From 16870fbb54a1cc48e5c4efad45374f118a57f1a1 Mon Sep 17 00:00:00 2001
+From: lintong <lintong@skyworth.com>
+Date: Wed, 06 Dec 2023 14:52:17 +0800
+Subject: [PATCH] [SWMD-878]上传SdtTr369应用，版本号为1.0.1
+
+Change-Id: I5b1a8ebeab8db99b34840c3e8e1d07a7e85ade27
+---
+
+diff --git a/vendor/skyworthdigital/TV/configs/google_launcher/launcher_configuration.xml b/vendor/skyworthdigital/TV/configs/google_launcher/launcher_configuration.xml
+index 523e830..e71baca 100755
+--- a/vendor/skyworthdigital/TV/configs/google_launcher/launcher_configuration.xml
++++ b/vendor/skyworthdigital/TV/configs/google_launcher/launcher_configuration.xml
+@@ -182,6 +182,7 @@
+         <package-name>com.google.android.tv</package-name>
+         <package-name>com.sdt.ota</package-name>
+         <package-name>com.sdt.android.tr069</package-name>
++        <package-name>com.sdt.android.tr369</package-name>
+     </partner-package-notification-whitelist>
+ 
+     <!-- By default, each app gets to show one channel in the UI without user's
+diff --git a/vendor/skyworthdigital/TV/configs/skyconfig/config.properties b/vendor/skyworthdigital/TV/configs/skyconfig/config.properties
+index 57e22e6..b53f2c7 100755
+--- a/vendor/skyworthdigital/TV/configs/skyconfig/config.properties
++++ b/vendor/skyworthdigital/TV/configs/skyconfig/config.properties
+@@ -73,6 +73,7 @@
+ tms_url=https://172.28.11.232
+ tms_operator_name=platform
+ tms_tr069_port=8086
++tms_tr369_port=18369
+ tms_ota_port=30906
+ tms_cert_port=18443
+ tms_secret_key_port=17443
+diff --git a/vendor/tms/apps/Android.mk b/vendor/tms/apps/Android.mk
+index 8be1c63..c647700 100755
+--- a/vendor/tms/apps/Android.mk
++++ b/vendor/tms/apps/Android.mk
+@@ -35,6 +35,8 @@
+ LOCAL_VENDOR_MODULE := false
+ include $(BUILD_PREBUILT)
+ 
++include $(SK_LOCAL_PATH)/SdtTr369/Android.mk
++
+ include $(SK_LOCAL_PATH)/SdtDiagnose/Android.mk
+ 
+ ifneq ($(SK_CMS_LAUNCHER),atv)
+diff --git a/vendor/tms/apps/SdtTr369/Android.mk b/vendor/tms/apps/SdtTr369/Android.mk
+new file mode 100755
+index 0000000..87da7e1
+--- /dev/null
++++ b/vendor/tms/apps/SdtTr369/Android.mk
+@@ -0,0 +1,19 @@
++LOCAL_PATH := $(my-dir)
++
++include $(CLEAR_VARS)
++LOCAL_MODULE := SdtTr369
++LOCAL_SRC_FILES := $(LOCAL_MODULE).apk
++LOCAL_MODULE_CLASS := APPS
++LOCAL_MODULE_SUFFIX := .apk
++LOCAL_MODULE_TARGET_ARCH := arm
++LOCAL_CERTIFICATE := platform
++LOCAL_VENDOR_MODULE := false
++LOCAL_ENFORCE_USES_LIBRARIES := false
++LOCAL_POST_INSTALL_CMD := mkdir -p "$(TARGET_OUT)/etc/skyscripts"; \
++                          cp -rf "$(LOCAL_PATH)/script/tr369_script.sh" "$(TARGET_OUT)/etc/skyscripts/"; \
++                          cp -rf "$(LOCAL_PATH)/script/log" "$(TARGET_OUT)/etc/skyscripts/"; \
++                          mkdir -p "$(TARGET_OUT)/etc/init"; \
++                          cp -rf "$(LOCAL_PATH)/script/init.tr369.scripts.logcat.rc" "$(TARGET_OUT)/etc/init/"; \
++                          cp -rf "$(LOCAL_PATH)/script/init.tr369.scripts.tcpdump.rc" "$(TARGET_OUT)/etc/init/"
++
++include $(BUILD_PREBUILT)
+diff --git a/vendor/tms/apps/SdtTr369/SdtTr369.apk b/vendor/tms/apps/SdtTr369/SdtTr369.apk
+new file mode 100755
+index 0000000..cc0a0b1
+--- /dev/null
++++ b/vendor/tms/apps/SdtTr369/SdtTr369.apk
+@@ -0,0 +1,3 @@
++version https://git-lfs.github.com/spec/v1
++oid sha256:534f57958dbbdf16e8f8dd3b9e48a9889cf190360c3eb5af8ad51bac65869a09
++size 30731119
+diff --git a/vendor/tms/apps/SdtTr369/script/init.tr369.scripts.logcat.rc b/vendor/tms/apps/SdtTr369/script/init.tr369.scripts.logcat.rc
+new file mode 100755
+index 0000000..3747e13
+--- /dev/null
++++ b/vendor/tms/apps/SdtTr369/script/init.tr369.scripts.logcat.rc
+@@ -0,0 +1,9 @@
++service tr369_script /system/bin/sh /system/etc/skyscripts/tr369_script.sh
++    class core
++    user root
++    group root shell log readproc cache everybody system
++    seclabel u:r:sky_script:s0
++    oneshot
++
++on post-fs-data
++    start tr069_script
+diff --git a/vendor/tms/apps/SdtTr369/script/init.tr369.scripts.tcpdump.rc b/vendor/tms/apps/SdtTr369/script/init.tr369.scripts.tcpdump.rc
+new file mode 100755
+index 0000000..6e50684
+--- /dev/null
++++ b/vendor/tms/apps/SdtTr369/script/init.tr369.scripts.tcpdump.rc
+@@ -0,0 +1,16 @@
++service tcpdump /system/bin/tcpdump ${persist.sys.skyworth.tcpdump.args} -w /data/tcpdump/test1.pcap
++    class core
++    user root
++    group system
++    disabled
++    oneshot
++
++on property:persist.sys.skyworth.tcpdump=1
++    start tcpdump
++
++on property:persist.sys.skyworth.tcpdump=0
++    stop tcpdump
++    chmod 0660 /data/tcpdump/test1.pcap
++
++on post-fs-data
++    mkdir /data/tcpdump 0770 system system
+diff --git a/vendor/tms/apps/SdtTr369/script/log/sky_log_tr369_logcat.sh b/vendor/tms/apps/SdtTr369/script/log/sky_log_tr369_logcat.sh
+new file mode 100755
+index 0000000..544fb07
+--- /dev/null
++++ b/vendor/tms/apps/SdtTr369/script/log/sky_log_tr369_logcat.sh
+@@ -0,0 +1,44 @@
++#! /system/bin/sh
++#script_desc=this is shell script for catch logcat
++
++# logcat store dir
++LOGCAT_DIR_NAME=/data/tcpdump
++# logcat per file size(10M)
++LOGCAT_PER_FILE_SIZE=10240
++# logcat max file count(10)
++LOGCAT_MAX_FILE_COUNT=10
++
++mkdir -p $LOGCAT_DIR_NAME
++file_name=$LOGCAT_DIR_NAME/logcat_tr369.log
++touch system $file_name
++chgrp system $file_name
++chmod 0666 $file_name
++logcat *:w -vtime -n $LOGCAT_MAX_FILE_COUNT -r $LOGCAT_PER_FILE_SIZE -f $file_name &
++
++while true; do
++	find "$LOGCAT_DIR_NAME" -type f -exec chmod 666 {} +
++	sleep 30
++done
++
++# while :
++# do
++	# sleep 30
++	# source_files=$(ls $file_name.*)
++	# for source_file in ${source_files[@]}
++	# do
++		# if [[ $source_file == *.tar ]];then
++			# echo no need to tar
++		# else
++			# echo need to tar $source_file
++			# local target_file=$LOGCAT_DIR_NAME/logcat_`date +%Y%m%d-%H%M%S`.tar
++			# tar -zcf $target_file $source_file
++			# rm -rf $source_file
++		# fi
++		# sleep 3
++	# done
++	# local current_file_count=$(ls -l $LOGCAT_DIR_NAME/*.tar | grep "^-" | wc -l)
++	# if [ $current_file_count -gt $LOGCAT_MAX_FILE_COUNT ]; then
++		# local first_file_name=`echo $(ls -rt $LOGCAT_DIR_NAME/*.tar) | awk '{print $1}'`
++		# rm -rf $first_file_name
++	# fi
++# done
+diff --git a/vendor/tms/apps/SdtTr369/script/tr369_script.sh b/vendor/tms/apps/SdtTr369/script/tr369_script.sh
+new file mode 100755
+index 0000000..fdb17e9
+--- /dev/null
++++ b/vendor/tms/apps/SdtTr369/script/tr369_script.sh
+@@ -0,0 +1,33 @@
++#!/bin/bash
++echo tr369_script boot
++
++log_scripts_path=/system/etc/skyscripts/log/
++
++# function catch log
++function catch_log {
++	local script_list=${command_param//,/ }
++	for script in ${script_list[@]}; do
++		sh $log_scripts_path$script &
++	done
++	while true; do
++		echo tr369_script running
++		sleep 60
++	done
++}
++
++# read command and param
++log_command=$(cat /mnt/skyinfo/tr369_command)
++for cmd in ${log_command[@]}; do
++	if [[ $cmd == command_name* ]];then
++		command_name=${cmd//command_name=/}
++	elif [[ $cmd == command_param* ]];then
++		command_param=${cmd//command_param=/}
++	fi
++done
++
++if [ "catch_log" == $command_name ]; then
++	echo catch log
++	catch_log
++else
++	echo nothing
++fi
+diff --git a/vendor/tms/products/tms.mk b/vendor/tms/products/tms.mk
+index 80c3c3c..a928788 100755
+--- a/vendor/tms/products/tms.mk
++++ b/vendor/tms/products/tms.mk
+@@ -2,12 +2,17 @@
+     SdtCoreService \
+     SdtDiagnose \
+     SdtTr069 \
++    SdtTr369 \
+ 
+ PRODUCT_PACKAGES += SdtUpdate
+ 
+ # Configuration files for TMS apps
+ PRODUCT_COPY_FILES += vendor/tms/etc/permissions/privapp-permissions-tms-system.xml:$(PRODUCT_OUT)/system/etc/permissions/privapp-permissions-tms.xml
+ 
++PRODUCT_COPY_FILES += \
++    vendor/tms/sepolicy/certs/ca.pem:$(PRODUCT_OUT)/vendor/etc/security/certs/ca.pem \
++    vendor/tms/sepolicy/certs/client.pem:$(PRODUCT_OUT)/vendor/etc/security/certs/client.pem \
++
+ #PRODUCT_COPY_FILES += \
+ #    vendor/tms/sepolicy/certs/cacert.pem:$(PRODUCT_OUT)/vendor/etc/security/certs/cacert.pem \
+ #    vendor/tms/sepolicy/certs/clientcert.pem:$(PRODUCT_OUT)/vendor/etc/security/certs/clientcert.pem \
+diff --git a/vendor/tms/sepolicy/certs/ca.pem b/vendor/tms/sepolicy/certs/ca.pem
+new file mode 100755
+index 0000000..411d948
+--- /dev/null
++++ b/vendor/tms/sepolicy/certs/ca.pem
+@@ -0,0 +1,49 @@
++-----BEGIN RSA PRIVATE KEY-----
++MIIEpQIBAAKCAQEA3HcxtIEyg8flcmoEbnAkQRVGeWKIhFzYIVoQ5116Tq0RtW5a
++WpMs1Shji/m0I17yze0cVjrnPV1bYu3Fps0XMZOekkdzXzc83UBmGznjlHsAx6xp
++vmLgQU4phwHPYnelfF6JFLv1/g3wBy8j5Dr5l+n32cu0msQAwjidhYi01UF+2uiF
++z8O12qrVZCMSCG8X6NHDCb7I8/HFhhleVrMIehQGk5ZJ7xOAhBeosmnGNeZWdzP/
++tvLWGepL4RSkH3T8rDiKjK4lGLMR7Xn3oDP0KI3IOGSONyw0YbKl/bP7c9PUaWWU
++S7j9qQCxYByiXTss8ftMk/jM2ewj2ulkBWmcMQIDAQABAoIBAQCCkd1QSExAm/0a
++HAvv1F7EZPNOJLsxmUMvzYXBYS10ty+LwoWkqxGcVMVQO10irbMjntBviYc2Yroj
++BytONJ0N8Z2yiLqdo7taVi+i5FASuh6mI0ilRy4Fv2L84GeQq8fItrx9GS0BgAOu
++XY7mNr9n51uxE+Is3vSMErfIRETFH2GB6SBdAkZDoz0IFjRIoa7/pmFVI9nEIYUW
++N+DfG+D+vSMWwlnvOLImoV7+93AoMOnd7mgH4v40J2PsblViFp9LzNUeKiuqk7zD
++ttGIzi3p29D9y5Qnz/FbVA3+Ffzhy3pw5lWDnOlmUKmiN86Jsvrv4FNJf14IGBEN
++5aXCPyghAoGBAPcHnyUkN2KiZnPXXRKSDpIB1RQyFQpxi0euAm2BOYbgL42kzJ1d
++ldRi+SSfV9psakCFf/OvP0EeZTwZBpXA2Vak0t2CYhNtWqZWJJOlBoKnWLtgQdId
++H+r6d/aRwvzxka9tvEestq4fhCCPGBeFbjMaFJ9bIjS2F2u20LzB4y7FAoGBAOR4
++ohKoLiHR1APD+FiQGZVrYI9EHNSoSjppr9GQfks/6jzwtEYF/Z3+MTkvsR4CEUpB
++Ki/Xj3NuD5ggQyAOWmwrfLpbTvjg1tyJf7MNGys/os7PG/Rx7TNkXuLaVoUSpV3S
++MlANGWozjypeUx3p+zGEdX074Y8pDdDqBj2oCQ59AoGBAM96c0w6stoBFJPPGrjy
++O5KeP10LA2kWHKlDmX5nvu1tdgM9my3A4IrV5fPAcYVe8Y7nkaQWWMZUxSpIyqMU
++qnZ/USwCymUOv8hdKbNoM6Og8oHOQvo6xAgT/pX1rxPLwVTakfyRL43noo3GIbH/
++u6LoENIXNQ+YsOsjTQZ8wlcRAoGAFvvvyhKzOWHDg3F2jWpJuJdpyl/eyqH3fbLe
++JiX0Hpvac7D/Yb/+iKNmzkr29X7dwGuX0+JKoyEiXnp4ZkQrYpBpZtICutTbqKoI
++d7nMzugC9+0r8cZ4R2BEj2vJom+CxVJ9D0KSGPYA5BFDKVI9m/ioXSXmBiHqKucw
++I4nBB30CgYEAsWjd0I7aFThXz24msiADtyEDk4qKqNq0EBTh0V/thgeqYKeM+XuT
++XCMiEKYrhnO9mIaNT+xvJTSgotYBH8GPKdKQKtwXdraVPnVy07fya+wZ7CbFxaAt
++xTBe6Yj/+3zOGwMu3IfAeJT/zjWbFn/LkAqoNaDtOaZ3EXA5QVW0wfw=
++-----END RSA PRIVATE KEY-----
++-----BEGIN CERTIFICATE-----
++MIIDpzCCAo+gAwIBAgIJAKtucqL2zaL2MA0GCSqGSIb3DQEBCwUAMGoxCzAJBgNV
++BAYTAkNOMRIwEAYDVQQIDAlHdWFuZ0RvbmcxCzAJBgNVBAcMAlNaMREwDwYDVQQK
++DAhza3l3b3J0aDEPMA0GA1UECwwGc2t5b3ZzMRYwFAYDVQQDDA0xNzIuMjguMTEu
++MjMxMB4XDTIzMDkyODA2MjYzMloXDTMzMDkyNTA2MjYzMlowajELMAkGA1UEBhMC
++Q04xEjAQBgNVBAgMCUd1YW5nRG9uZzELMAkGA1UEBwwCU1oxETAPBgNVBAoMCHNr
++eXdvcnRoMQ8wDQYDVQQLDAZza3lvdnMxFjAUBgNVBAMMDTE3Mi4yOC4xMS4yMzEw
++ggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDcdzG0gTKDx+VyagRucCRB
++FUZ5YoiEXNghWhDnXXpOrRG1blpakyzVKGOL+bQjXvLN7RxWOuc9XVti7cWmzRcx
++k56SR3NfNzzdQGYbOeOUewDHrGm+YuBBTimHAc9id6V8XokUu/X+DfAHLyPkOvmX
++6ffZy7SaxADCOJ2FiLTVQX7a6IXPw7XaqtVkIxIIbxfo0cMJvsjz8cWGGV5Wswh6
++FAaTlknvE4CEF6iyacY15lZ3M/+28tYZ6kvhFKQfdPysOIqMriUYsxHtefegM/Qo
++jcg4ZI43LDRhsqX9s/tz09RpZZRLuP2pALFgHKJdOyzx+0yT+MzZ7CPa6WQFaZwx
++AgMBAAGjUDBOMB0GA1UdDgQWBBQ0H1IEQZEQoyt3GvniGIAphJoOKzAfBgNVHSME
++GDAWgBQ0H1IEQZEQoyt3GvniGIAphJoOKzAMBgNVHRMEBTADAQH/MA0GCSqGSIb3
++DQEBCwUAA4IBAQBG2NvsLkCQpvx9Gaz2CPQQqOHHFuiFsTSOKiAXugU/4WywSgTR
++WyU1ib7V+WUsG9ceOLMmkZqf+3J6IifEOdmcQK95q+D2UFE6Iw4CbTLqToFiFxsC
++Tm5b3clDa5Pjn2BTow1Rnw4aMWfLubGi9T8LsJJV2R4EmtZ6LL6hr4kB/bAPO32g
++tokOmtDB3xqW0HN41a+TgSg2bCHsEdnEc4leYCBkqrIt8dJJmw73mkbJbKXSUwvb
++VnCSshRjl+SKUG41yqe8kCOqjAn3jCzTo0WcQAq/igfzZZg1xQ9xQvVFzU+jnMlZ
++WtIE9ReMvt7rWhGQpZ13Fy5QuVixmveIVk73
++-----END CERTIFICATE-----
+diff --git a/vendor/tms/sepolicy/certs/client.pem b/vendor/tms/sepolicy/certs/client.pem
+new file mode 100755
+index 0000000..039c4f9
+--- /dev/null
++++ b/vendor/tms/sepolicy/certs/client.pem
+@@ -0,0 +1,48 @@
++-----BEGIN RSA PRIVATE KEY-----
++MIIEpAIBAAKCAQEArweJRzIpZP+fIfdXS2V89OwnQk3QDbDiQ92JeW4ouy6fJo0k
++59/gVM9hbtSZdK4Uio51v69X4G9ojo1ZIVas1PUE7OuP7mmUtscNxzuqlZGaNVeq
++mWnXpFZpxMFHiZqO6gL3Q/ipKwzJR4U2vZqVQ7/kwWdb9o50qahtO6J+TlQckmVn
++tNENXuA/l1sk5Hql7YdThM+IVcQ9cS/UG3FspYWV+MBEICXyMT8EZjDGA8Se1kVV
++kL5VedhINd5DasJZKKUuLf0qUtBJ2NRuXcQx88ync+B/Qr59zK+GDsJbIzhgygd+
++MHQ3KUi8ucdF6gOm9J6LZW0YADm0HSPjPWqO+QIDAQABAoIBAFOsRKI2hrdzxD1W
++ovK2R7BGnNYDoOyKnQBYjfnxAaPKO+cQHo6C5hllMmzrUZkIB2XdiMjkKBxw5gkP
++5YYci28a2wnv6tTMwH1IV3vhOEFcY94QVMwWXzJ+5P1ccLiFnMCePlrOKwEbkbWR
++J4QovCaxO8iBguMxYvAgRmf13G/Q15VHPOUVZjrinK+QzROGX33HpCodMFKRY/9D
++04FSt0gqp8Wvm2XkH0yTTvkmU5wAzI84jSljNEE1z6FAm5VFXAmOs1+R7nmdkN6L
++vzRFWeq0wdKwCQsvULnWsIeV/vwPjlc+d7M8RS72J6MFj/3lFxbfkUhc6xSds56D
++eM/A7skCgYEA1zaw3mSo7g7vZVpT8vDM8siHF7l6ETfkaye6icFrpQ6wihRts5j5
++FOqmun7R+XyPIv3axu31lq4Gkxwc/AvSC/fUmHNSiN9VyeUctc+pHmavnvt8li+E
++hPtHDap1ANa/24Czt7FqzeuMQ7iqy6wUUP6W4dv9t4rnCa/KgRSAAwMCgYEA0DNE
++m4QCDPlaaPgqmnUUjI83ObRYgFodJiIbkM9GmqQaQYpY/pi7DDzI3H1AAQyXH6SJ
++gZAJZdemfeu3mO+ClfzO2FI+60nnWduGtnrAigw7zRIwAorlrgbeOpmOlgM0Vn4G
++LNEj2WuISYl+PpCVsOOfj7eAggdmLSV3p5Zxh1MCgYEAy91Z5AFUaNWq/sZ3GX3z
++ltRP7DBdqmvYq4zhzlZz4tIsd1BsrqFs6dxx/d3eh8fvS0VPdfu6FXdacQZDipqj
++6YRlVdiASXnOKUcoUC2bVVoOaLpvxVDT5qilIRPka9wBuCuNkqe0tcW4g/otiGvE
++fwj74o3jJHem7e0hFe9WaAMCgYEAhOzWlru3W3UwJeiburWZgwxE5BCimH/wMFKC
++avgLSdwP71xW6WW1tmBwlWVaIdFaAxfXuuKtPVprr+V4+KmiJASeQzpvdWVf0dz4
++qzTADOM2ov1DrbvkXDGCXMOBZ4FwPvCDHMYCL2QaRWkFMwi4qZEKZIVyBJKYx6Yu
++OM8yeIUCgYAzEdc1+GQMgzKFbsjzXMUpXOXTCSSmWKYaAKFvbmsSw2JwfeOBoo0C
++yMT0gJeHaOWKPTsEfmeESU5GnGiLbxRfxWT8ZvkfOv6vPS6xX7gIQxeLC0aMVdIU
++iLKr5vuwRZEKdP/sCSSCfVfMJEw4sg4NOYDskKK+eSPVayNucega+Q==
++-----END RSA PRIVATE KEY-----
++-----BEGIN CERTIFICATE-----
++MIIDcjCCAloCAQEwDQYJKoZIhvcNAQELBQAwajELMAkGA1UEBhMCQ04xEjAQBgNV
++BAgMCUd1YW5nRG9uZzELMAkGA1UEBwwCU1oxETAPBgNVBAoMCHNreXdvcnRoMQ8w
++DQYDVQQLDAZza3lvdnMxFjAUBgNVBAMMDTE3Mi4yOC4xMS4yMzEwHhcNMjMwOTI4
++MDYzMzA4WhcNMzMwOTI1MDYzMzA4WjCBkzELMAkGA1UEBhMCQ04xEjAQBgNVBAgM
++CUd1YW5nRG9uZzELMAkGA1UEBwwCU1oxETAPBgNVBAoMCHNreXdvcnRoMQ8wDQYD
++VQQLDAZza3lvdnMxFjAUBgNVBAMMDTE3Mi4yOC4xMS4yMzExJzAlBgkqhkiG9w0B
++CQEWGHpoYW5neGluZzAyQHNreXdvcnRoLmNvbTCCASIwDQYJKoZIhvcNAQEBBQAD
++ggEPADCCAQoCggEBAK8HiUcyKWT/nyH3V0tlfPTsJ0JN0A2w4kPdiXluKLsunyaN
++JOff4FTPYW7UmXSuFIqOdb+vV+BvaI6NWSFWrNT1BOzrj+5plLbHDcc7qpWRmjVX
++qplp16RWacTBR4majuoC90P4qSsMyUeFNr2alUO/5MFnW/aOdKmobTuifk5UHJJl
++Z7TRDV7gP5dbJOR6pe2HU4TPiFXEPXEv1BtxbKWFlfjARCAl8jE/BGYwxgPEntZF
++VZC+VXnYSDXeQ2rCWSilLi39KlLQSdjUbl3EMfPMp3Pgf0K+fcyvhg7CWyM4YMoH
++fjB0NylIvLnHReoDpvSei2VtGAA5tB0j4z1qjvkCAwEAATANBgkqhkiG9w0BAQsF
++AAOCAQEALX0Ox3/aeKozUNR0en5XjTkFGJAvcJp8/UWYuRjCxEwANhKzgFZmgpcK
++Ev7vs+n0BHakVbEMdkMUef/Xyy9913hQxEyEHcK1CCK9a0GnMimVUyWslCOx/vuf
++0O9ydryjbocd2NhY0AHOqzbJIOBluiuuyRrmMaRhS3M4fhhJBnwO8GybJqcGjzO0
++dybWhYf42CpEdeSP8POI854O89rvWj+ZcVfzYlYZJyqrSmS+5aWqTv+GT57+AbqW
++YRGyS0kBIsNEEKe0JlnqYLSz6n/NvxiUXoMHv1w7naWlnv5a5MYR1gvphwY1OGpz
++l2Ga5Ga8rCHOyfdZffbRrONuQlYqnQ==
++-----END CERTIFICATE-----
+diff --git a/vendor/tms/sepolicy/system_app.te b/vendor/tms/sepolicy/system_app.te
+index 22c7433..6a83b4d 100755
+--- a/vendor/tms/sepolicy/system_app.te
++++ b/vendor/tms/sepolicy/system_app.te
+@@ -1,3 +1,5 @@
+ 
+ allow system_app tcpdump_file:file { create_file_perms };
+ allow system_app tcpdump_file:dir { rw_dir_perms };
++allow system_app system_app_data_file:sock_file { create unlink };
++allow system_app system_app_data_file:dir { write };

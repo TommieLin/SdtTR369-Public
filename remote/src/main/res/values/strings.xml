@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">scrrtcsrv</string>
+    <string name="socketio_url">socketio.url</string>
+    <string name="ice_servers">ice.servers</string>
+    <string name="video_size">video.size</string>
+    <string name="video_fps">video.fps</string>
+    <string name="dev_name">device.name</string>
+</resources>

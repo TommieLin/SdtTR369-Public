@@ -1,0 +1,64 @@
+plugins {
+    id 'com.android.library'
+}
+
+android {
+    compileSdkVersion 30
+    buildToolsVersion '30.0.3'
+
+    defaultConfig {
+        minSdkVersion 28
+        targetSdkVersion 30
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        externalNativeBuild {
+            cmake {
+                abiFilters "armeabi-v7a"
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    namespace 'com.sdt.accessor'
+    buildFeatures {
+        aidl true
+    }
+}
+
+dependencies {
+    compileOnly files('libs/framework.jar')
+    compileOnly files('libs/droidlogic.jar')
+    implementation files('libs/RtkDisplayDeviceCtrl.jar')
+
+    annotationProcessor project(':annotation')
+    implementation project(path: ':annotation')
+    implementation project(path: ':tr369')
+    implementation project(path: ':remote')
+    implementation project(path: ':pty')
+    implementation project(path: ':netspeed')
+
+    implementation 'org.jetbrains:annotations:15.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.github.bumptech.glide:glide:4.11.0'
+    annotationProcessor 'com.github.bumptech.glide:compiler:4.11.0'
+    implementation 'com.github.bumptech.glide:okhttp3-integration:4.11.0'
+    implementation 'com.google.code.gson:gson:2.8.9'
+    implementation 'com.squareup.okhttp3:logging-interceptor:3.5.0'
+    implementation 'com.squareup.okhttp3:okhttp:4.9.1'
+    implementation 'io.socket:socket.io-client:1.0.0'
+    implementation 'com.google.guava:guava:30.1-jre'
+    implementation 'com.squareup.picasso:picasso:2.71828'
+    implementation 'com.orhanobut:logger:2.2.0'
+    implementation 'io.ipinfo:ipinfo-api:3.0.0'
+
+}

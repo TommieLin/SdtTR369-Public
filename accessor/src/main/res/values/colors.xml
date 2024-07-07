@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="view_background">#363636</color>
+    <color name="gray_button_shortmsg">#616161</color>
+    <color name="black_background">#262626</color>
+    <color name="gray_button_focused">#e0e0e0</color>
+    <color name="gray_button_unfocused">#9e9e9e</color>
+</resources>

@@ -1,0 +1,700 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<model>
+    <schema name="Device" type="object">
+
+        <schema name="DeviceInfo" type="object">
+            <schema name="Manufacturer" constraint="64" getter="diagnose" type="string" />
+            <schema name="ManufacturerOUI" constraint="6" getter="diagnose" type="string" />
+            <schema name="ModelName" constraint="64" getter="diagnose" inform="true" type="string" />
+            <schema name="ModelID" constraint="64" getter="diagnose" type="string" />
+            <schema name="Description" constraint="256" default="SKYWORTH IPTV" type="string" />
+            <schema name="ProductClass" constraint="64" getter="diagnose" type="string" />
+            <schema name="SerialNumber" constraint="64" getter="diagnose" type="string" />
+            <schema name="ChipID" constraint="64" getter="diagnose" type="string" />
+
+            <schema name="HardwareVersion" constraint="64" getter="diagnose" inform="true" type="string" />
+            <schema name="SoftwareVersion" constraint="64" getter="diagnose" inform="true" type="string" />
+
+            <schema name="SafeVersion" constraint="64" default="v0" type="string" />
+            <schema name="ConfigFileVersion" constraint="64" default="v1.0" type="string" />
+            <schema name="LogoVersion" constraint="64" default="V301" type="string" />
+
+            <schema name="EnabledOptions" constraint="1024" default="0" type="string" />
+            <schema name="AdditionalHardwareVersion" constraint="64" default="LOADER_V:2000008,BOOT_V:8192057"
+                type="string" />
+            <schema name="AdditionalSoftwareVersion" constraint="64" default="EN8-MTK8637" type="string" />
+            <schema name="ProvisioningCode" constraint="64" default="309176" inform="true" type="string" />
+
+            <schema name="DeviceStatus" constraint="64" default="Up" type="string" />
+            <schema name="UpTime" getter="diagnose" inform="true" type="unsignedInt" />
+            <schema name="FirstUseDate" getter="diagnose" type="dateTime" />
+            <schema name="DeviceLog" constraint="32768" default="This is a running log." type="string" />
+            <schema name="MemoryStatus" type="object">
+                <schema name="Total" getter="diagnose" inform="true" type="unsignedInt" />
+                <schema name="Free" getter="diagnose" inform="true" type="unsignedInt" />
+            </schema>
+            <schema name="ProcessStatus" type="object">
+                <schema name="CPUUsage" getter="diagnose" inform="true" type="unsignedInt" />
+                <schema name="ProcessNumberOfEntries" table="Device.DeviceInfo.ProcessStatus.Process.{i}"
+                    type="multipleNumber" />
+                <schema name="Process.{i}" type="multipleObject">
+                    <schema name="PID" getter="diagnose" type="unsignedInt" />
+                    <schema name="Command" constraint="256" getter="diagnose" type="string" />
+                    <schema name="Size" getter="diagnose" type="unsignedInt" />
+                    <schema name="Priority" getter="diagnose" type="unsignedInt" />
+                    <schema name="CPUTime" getter="diagnose" type="unsignedInt" />
+                    <schema name="State" constraint="32" getter="diagnose" type="string" />
+                </schema>
+            </schema>
+            <schema name="TemperatureStatus" type="object">
+                <schema name="TemperatureSensorNumberOfEntries"
+                    table="Device.DeviceInfo.TemperatureStatus.TemperatureSensor.{i}" type="multipleNumber" />
+                <schema name="TemperatureSensor.{i}" type="multipleObject">
+                    <schema name="Value" getter="diagnose" type="int" />
+                    <schema name="LastUpdate" getter="diagnose" type="dateTime" />
+                    <schema name="LowAlarmValue" getter="diagnose" setter="diagnose" type="int" write="W" />
+                    <schema name="LowAlarmTime" getter="diagnose" type="dateTime" />
+                    <schema name="HighAlarmValue" getter="diagnose" setter="diagnose" type="int" write="W" />
+                    <schema name="HighAlarmTime" getter="diagnose" type="dateTime" />
+                </schema>
+            </schema>
+            <schema name="ActiveFirmwareImage" constraint="64" getter="diagnose" type="string" />
+            <schema name="BootFirmwareImage" constraint="64" getter="diagnose" type="string" />
+            <schema name="FirmwareImageNumberOfEntries" table="Device.DeviceInfo.FirmwareImage.{i}" type="multipleNumber" />
+            <schema name="FirmwareImage.{i}" type="multipleObject">
+                <schema name="Alias" constraint="64" getter="diagnose" type="string" />
+                <schema name="Name" constraint="64" getter="diagnose" type="string" />
+                <schema name="Version" constraint="64" getter="diagnose" type="string" />
+                <schema name="Available" constraint="64" getter="diagnose" type="string" />
+                <schema name="Status" constraint="64" getter="diagnose" type="string" />
+                <schema name="BootFailureLog" constraint="64" getter="diagnose" type="string" />
+            </schema>
+
+            <schema name="LocationNumberOfEntries" table="Device.DeviceInfo.Location.{i}" type="multipleNumber" />
+            <schema name="Location.{i}" type="multipleObject">
+                <schema name="Source" getter="diagnose" type="string" />
+                <schema name="ExternalSource" getter="diagnose" type="string" />
+                <schema name="ExternalProtocol" getter="diagnose" type="string" />
+                <schema name="DataObject" getter="diagnose" setter="diagnose" type="string" write="W" />
+                <schema name="AcquiredTime" getter="diagnose" type="string" />
+            </schema>
+        </schema>
+
+        <schema name="GatewayInfo" type="object">
+            <schema name="ManufacturerOUI" default="309176" type="string" />
+            <schema name="ProductClass" constraint="64" getter="diagnose" type="string" />
+            <schema name="SerialNumber" constraint="64" getter="diagnose" type="string" />
+        </schema>
+
+        <schema name="Time" type="object">
+            <schema name="Status" getter="diagnose" type="string" />
+            <schema name="Enable" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+            <schema name="NTPServer1" getter="diagnose" setter="diagnose" type="string" write="W" />
+            <schema name="NTPServer2" getter="diagnose" setter="diagnose" type="string" write="W" />
+            <schema name="NTPServer3" getter="diagnose" setter="diagnose" type="string" write="W" />
+            <schema name="NTPServer4" getter="diagnose" setter="diagnose" type="string" write="W" />
+            <schema name="NTPServer5" getter="diagnose" setter="diagnose" type="string" write="W" />
+            <schema name="CurrentLocalTime" getter="diagnose" setter="diagnose" type="dateTime" write="W" />
+            <schema name="LocalTimeZone" constraint="256" getter="diagnose" setter="diagnose" type="string" write="W" />
+        </schema>
+
+        <schema name="UserInterface" type="object">
+            <schema name="PasswordRequired" default="0" type="boolean" />
+            <schema name="PasswordUserSelectable" default="0" type="boolean" />
+            <schema name="UpgradeAvailable" default="0" type="boolean" />
+            <schema name="WarrantyDate" type="dateTime" />
+            <schema name="ISPName" default="ISPName" type="string" />
+            <schema name="ISPHelpDesk" default="ISPHelpDesk" type="string" />
+            <schema name="ISPHomePage" default="ISPHomePage" type="string" />
+            <schema name="ISPHelpPage" default="ISPHelpPage" type="string" />
+            <schema name="ISPLogo" default="ISPLogo" type="string" />
+            <schema name="ISPLogoSize" default="ISPLogoSize" type="string" />
+            <schema name="ISPMailServer" default="ISPMailServer" type="string" />
+            <schema name="ISPNewsServer" default="ISPNewsServer" type="string" />
+            <schema name="TextColor" default="000000" type="string" />
+            <schema name="BackgroundColor" default="00ff00" type="string" />
+            <schema name="ButtonColor" default="ff00ff" type="string" />
+            <schema name="ButtonTextColor" default="000000" type="string" />
+            <schema name="AvailableLanguages" default="0:chinese,1:english" type="string" />
+            <schema name="CurrentLanguage" getter="diagnose" setter="diagnose" type="string" write="W" />
+            <schema name="UserUpdateServer" default="http://192.168.11.16/update" type="string" />
+            <schema name="AutoUpdateServer" getter="diagnose" setter="diagnose" type="string" write="W" />
+        </schema>
+
+        <schema name="Ethernet" type="object">
+            <schema name="LinkNumberOfEntries" table="Device.Ethernet.Link.{i}" type="multipleNumber" />
+            <schema name="Link.{i}" type="multipleObject">
+                <schema name="Alias" default="cpe-eth-alias" type="string" />
+                <schema name="Name" constraint="64" getter="diagnose" type="string" />
+                <schema name="Enable" getter="diagnose" type="boolean" />
+                <schema name="Status" getter="diagnose" type="string" />
+                <schema name="LowerLayers" default="Device.LAN." type="string" />
+                <schema name="MACAddress" constraint="64" getter="diagnose" inform="true" type="string" />
+            </schema>
+        </schema>
+
+        <schema name="IP" type="object">
+            <schema name="IPv4Capable" getter="diagnose" type="boolean" />
+            <schema name="IPv4Enable" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+            <schema name="IPv6Capable" getter="diagnose" type="boolean" />
+            <schema name="IPv6Enable" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+
+            <schema name="Diagnostics" type="object">
+                <schema name="IPPing" type="object">
+                    <!-- Input -->
+                    <schema name="Host" setter="diagnose" type="string" write="W" />
+                    <schema name="NumberOfRepetitions" setter="diagnose" type="unsignedInt" write="W" />
+                    <schema name="Timeout" setter="diagnose" type="unsignedInt" write="W" />
+                    <schema name="DataBlockSize" setter="diagnose" type="unsignedInt" write="W" />
+                    <schema name="DSCP" setter="diagnose" type="unsignedInt" write="W" />
+                    <schema name="Interface" setter="diagnose" type="string" write="W" />
+                    <schema name="ProtocolVersion" setter="diagnose" type="string" write="W" />
+                    <!-- Output -->
+                    <schema name="Status" getter="diagnose" type="string" />
+                    <schema name="IPAddressUsed" getter="diagnose" type="string" />
+                    <schema name="SuccessCount" getter="diagnose" type="unsignedInt" />
+                    <schema name="FailureCount" getter="diagnose" type="unsignedInt" />
+                    <schema name="AverageResponseTime" getter="diagnose" type="unsignedInt" />
+                    <schema name="MinimumResponseTime" getter="diagnose" type="unsignedInt" />
+                    <schema name="MaximumResponseTime" getter="diagnose" type="unsignedInt" />
+                    <schema name="AverageResponseTimeDetailed" getter="diagnose" type="unsignedInt" />
+                    <schema name="MinimumResponseTimeDetailed" getter="diagnose" type="unsignedInt" />
+                    <schema name="MaximumResponseTimeDetailed" getter="diagnose" type="unsignedInt" />
+                </schema>
+
+                <schema name="TraceRoute" type="object">
+                    <!-- Input -->
+                    <schema name="Host" getter="diagnose" setter="diagnose" type="string" write="W" />
+                    <schema name="DSCP" getter="diagnose" setter="diagnose" type="unsignedInt" write="W" />
+                    <schema name="Timeout" getter="diagnose" setter="diagnose" type="unsignedInt" write="W" />
+                    <schema name="MaxHopCount" getter="diagnose" setter="diagnose" type="unsignedInt" write="W" />
+                    <schema name="DataBlockSize" getter="diagnose" setter="diagnose" type="unsignedInt" write="W" />
+                    <schema name="Interface" getter="diagnose" setter="diagnose" type="string" write="W" />
+                    <schema name="ProtocolVersion" getter="diagnose" setter="diagnose" type="string" write="W" />
+                    <!-- Output -->
+                    <schema name="Status" getter="diagnose" setter="diagnose" type="string" write="W" />
+                    <schema name="ResponseTime" getter="diagnose" setter="diagnose" type="unsignedInt" write="W" />
+                    <schema name="RouteHopsNumberOfEntries" table="Device.IP.Diagnostics.TraceRoute.RouteHops.{i}"
+                        type="multipleNumber" />
+                    <schema name="RouteHops.{i}" type="multipleObject">
+                        <schema name="Host" getter="diagnose" type="string" />
+                        <schema name="HostAddress" getter="diagnose" type="string" />
+                        <schema name="RTTimes" getter="diagnose" type="string" />
+                    </schema>
+                </schema>
+
+                <schema name="DownloadDiagnostics" type="object">
+                    <!-- Input -->
+                    <schema name="DownloadURL" constraint="256" getter="diagnose" setter="diagnose" type="string"
+                        write="W" />
+                    <schema name="TimeBasedTestDuration" getter="diagnose" setter="diagnose" type="unsignedInt" write="W" />
+                    <!-- Output -->
+                    <schema name="Status" getter="diagnose" type="string" />
+                    <schema name="BOMTime" getter="diagnose" type="dateTime" />
+                    <schema name="EOMTime" getter="diagnose" type="dateTime" />
+                    <schema name="TestBytesReceived" getter="diagnose" type="unsignedInt" />
+                </schema>
+
+            </schema>
+
+            <schema name="InterfaceNumberOfEntries" table="Device.IP.Interface.{i}" type="multipleNumber" />
+            <schema name="Interface.{i}" type="multipleObject">
+                <schema name="Enable" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+                <schema name="Status" getter="diagnose" type="string" />
+                <schema name="Name" constraint="64" getter="diagnose" type="string" />
+                <schema name="Type" getter="diagnose" type="string" />
+                <schema name="MaxMTUSize" getter="diagnose" type="unsignedInt" />
+                <schema name="LowerLayers" default="Device.WiFi.Radio.1." type="string" />
+                <schema name="IPv4AddressNumberOfEntries" table="Device.IP.Interface.{i}.IPv4Address.{i}"
+                    type="multipleNumber" />
+                <schema name="IPv4Address.{i}" type="multipleObject">
+                    <schema name="Enable" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+                    <schema name="Status" getter="diagnose" type="string" />
+                    <schema name="IPAddress" constraint="15" getter="diagnose" setter="diagnose" type="string" write="W" />
+                    <schema name="SubnetMask" constraint="15" getter="diagnose" setter="diagnose" type="string" write="W" />
+                    <schema name="AddressingType" getter="diagnose" type="string" />
+                </schema>
+            </schema>
+        </schema>
+
+        <schema name="WiFi" type="object">
+            <schema name="RadioNumberOfEntries" table="Device.WiFi.Radio.{i}" type="multipleNumber" />
+            <schema name="Radio.{i}" type="multipleObject">
+                <schema name="Enable" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+                <schema name="Status" constraint="64" getter="diagnose" type="string" />
+                <schema name="Alias" constraint="64" default="cpe-radio-alias" type="string" />
+                <schema name="Name" constraint="64" getter="diagnose" type="string" />
+                <schema name="LowerLayers" constraint="64" default="Device.WiFi.SSID.1." type="string" />
+                <schema name="ChannelsInUse" constraint="64" getter="diagnose" type="string" />
+                <schema name="Channel" getter="diagnose" type="unsignedInt" />
+                <schema name="TransmitPowerSupported" constraint="64" default="0,25,50,75,100" type="string" />
+                <schema name="TransmitPower" constraint="64" default="-1" type="string" />
+                <schema name="MaxBitRate" constraint="64" getter="diagnose" type="string" />
+                <schema name="SupportedFrequencyBands" constraint="64" default="2.4GHz,5GHz" type="string" />
+                <schema name="OperatingFrequencyBand" constraint="64" getter="diagnose" type="string" />
+                <schema name="Stats" type="object">
+                    <schema name="BytesSent" getter="diagnose" type="unsignedInt" />
+                    <schema name="BytesReceived" getter="diagnose" type="unsignedInt" />
+                    <schema name="PacketSend" getter="diagnose" type="unsignedInt" />
+                    <schema name="PacketReceived" getter="diagnose" type="unsignedInt" />
+                    <schema name="ErrorReceived" getter="diagnose" type="unsignedInt" />
+                    <schema name="RxErrors" getter="diagnose" type="unsignedInt" />
+                    <schema name="ConnectionUpTime" getter="diagnose" type="unsignedInt" />
+                    <schema name="PhyRate" getter="diagnose" type="unsignedInt" />
+                    <schema name="Noise" getter="diagnose" type="int" />
+                </schema>
+            </schema>
+
+            <!-- 附近的无线WiFi -->
+            <schema name="NeighboringWiFiDiagnostic" type="object">
+                <schema name="DiagnosticsState" getter="diagnose" type="string" />
+                <schema name="ResultNumberOfEntries" table="Device.WiFi.NeighboringWiFiDiagnostic.Result.{i}"
+                    type="multipleNumber" />
+                <schema name="Result.{i}" type="multipleObject">
+                    <schema name="Radio" getter="diagnose" type="string" />
+                    <schema name="SSID" getter="diagnose" type="string" />
+                    <schema name="BSSID" getter="diagnose" type="string" />
+                    <schema name="Channel" getter="diagnose" type="unsignedInt" />
+                    <schema name="SignalStrength" getter="diagnose" type="int" />
+                    <schema name="SecurityModeEnabled" getter="diagnose" type="string" />
+                    <schema name="EncryptionMode" getter="diagnose" type="string" />
+                    <schema name="OperatingFrequencyBand" getter="diagnose" type="string" />
+                    <schema name="OperatingChannelBandwidth" getter="diagnose" type="string" />
+                </schema>
+            </schema>
+
+            <schema name="SSIDNumberOfEntries" table="Device.WiFi.SSID.{i}" type="multipleNumber" />
+            <schema name="SSID.{i}" type="multipleObject">
+                <schema name="Enable" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+                <schema name="Status" constraint="64" getter="diagnose" type="string" />
+                <schema name="Alias" constraint="64" default="cpe-ssid-alias" type="string" />
+                <schema name="Name" constraint="64" getter="diagnose" type="string" />
+                <schema name="BSSID" constraint="64" getter="diagnose" type="string" />
+                <schema name="SSID" constraint="64" getter="diagnose" type="string" />
+                <schema name="MACAddress" getter="diagnose" type="string" />
+            </schema>
+
+            <schema name="EndPointNumberOfEntries" table="Device.WiFi.EndPoint.{i}" type="multipleNumber" />
+            <schema name="EndPoint.{i}" type="multipleObject">
+                <schema name="Enable" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+                <schema name="Status" constraint="64" getter="diagnose" type="string" />
+                <schema name="Alias" constraint="64" default="cpe-radio-alias" type="string" />
+                <schema name="ProfileReference" constraint="256" getter="diagnose" setter="diagnose" type="string"
+                    write="W" />
+                <schema name="SSIDReference" constraint="256" getter="diagnose" type="string" />
+                <schema name="WifiStandard" constraint="64" getter="diagnose" type="string" />
+                <schema name="Stats" type="object">
+                    <schema name="LastDataDownlinkRate" getter="diagnose" type="unsignedInt" />
+                    <schema name="LastDataUplinkRate" getter="diagnose" type="unsignedInt" />
+                    <schema name="SignalStrength" getter="diagnose" inform="true" type="int" />
+                    <schema name="Retransmissions" getter="diagnose" type="unsignedInt" />
+                    <schema name="X_SKYW_SNR" getter="diagnose" inform="true" type="unsignedInt" />
+                </schema>
+                <schema name="Security" type="object">
+                    <schema name="ModesSupported" getter="diagnose" type="string" />
+                </schema>
+
+                <schema name="ProfileNumberOfEntries" table="Device.WiFi.EndPoint.{i}.Profile.{i}" type="multipleNumber" />
+                <schema name="Profile.{i}" type="multipleObject">
+                    <schema name="Enable" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+                    <schema name="Status" constraint="64" getter="diagnose" type="string" />
+                    <schema name="Alias" constraint="64" getter="diagnose" setter="diagnose" type="string" write="W" />
+                    <schema name="SSID" constraint="32" getter="diagnose" setter="diagnose" type="string" write="W" />
+                </schema>
+            </schema>
+        </schema>
+
+        <schema name="LAN" type="object">
+            <schema name="AddressingType" getter="diagnose" setter="diagnose" type="string" write="W" />
+            <schema name="IPAddress" getter="diagnose" inform="true" setter="diagnose" type="string" write="W" />
+            <schema name="IPv6Address" getter="diagnose" type="string" />
+            <schema name="SubnetMask" getter="diagnose" setter="diagnose" type="string" write="W" />
+            <schema name="DefaultGateway" getter="diagnose" setter="diagnose" type="string" write="W" />
+            <schema name="DNSServers" getter="diagnose" setter="diagnose" type="string" write="W" />
+            <schema name="MACAddress" getter="diagnose" type="string" />
+        </schema>
+
+        <schema name="Services" type="object">
+            <schema name="STBServiceNumberOfEntries" table="Device.Services.STBService.{i}" type="multipleNumber" />
+            <schema name="STBService.{i}" type="multipleObject">
+                <schema name="AVPlayerNumberOfEntries" table="Device.Services.STBService.{i}.AVPlayer.{i}"
+                    type="multipleNumber" />
+                <schema name="AVPlayer.{i}" type="multipleObject">
+                    <schema name="Name" constraint="64" getter="diagnose" type="string" />
+                    <schema name="AudioLanguage" constraint="64" getter="diagnose" type="string" />
+                    <schema name="SubtitlingLanguage" constraint="64" getter="diagnose" type="string" />
+                    <schema name="SubtitlingStatus" constraint="64" getter="diagnose" type="string" />
+                </schema>
+
+                <schema name="Components" type="object">
+                    <schema name="HDMINumberOfEntries" table="Device.Services.STBService.{i}.Components.HDMI.{i}"
+                        type="multipleNumber" />
+                    <schema name="HDMI.{i}" type="multipleObject">
+                        <schema name="Enable" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+                        <schema name="Status" getter="diagnose" type="string" />
+                        <schema name="Name" getter="diagnose" type="string" />
+                        <schema name="ResolutionMode" getter="diagnose" type="string" />
+                        <schema name="ResolutionValue" getter="diagnose" setter="diagnose" type="string" write="W" />
+                        <schema name="DisplayDevice" type="object">
+                            <schema name="Status" constraint="64" getter="diagnose" type="string" />
+                            <schema name="Name" constraint="64" getter="diagnose" type="string" />
+                            <schema name="EEDID" constraint="256" getter="diagnose" type="string" />
+                            <schema name="SupportedResolutions" constraint="256" getter="diagnose" type="string" />
+                            <schema name="PreferredResolution" getter="diagnose" type="string" />
+                            <schema name="CECSupport" getter="diagnose" type="string" />
+                            <!-- amlogic接口不支持 -->
+                            <!-- <schema name="AutoLipSyncSupport" type="string" getter="diagnose"/>-->
+                            <!-- <schema name="VideoLatency" type="unsignedInt" getter="diagnose"/>-->
+                            <!-- <schema name="HDMI3DPresent" type="string" getter="diagnose"/>-->
+                        </schema>
+                        <schema name="CecSwitch" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+                        <schema name="CecOneKeyPlay" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+                        <schema name="CecAutoPowerOff" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+                        <schema name="CecVolumeControl" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+                        <schema name="CecAutoChangeLanguage" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+                    </schema>
+
+                    <schema name="AudioOutputNumberOfEntries"
+                        table="Device.Services.STBService.{i}.Components.AudioOutput.{i}" type="multipleNumber" />
+                    <schema name="AudioOutput.{i}" type="multipleObject">
+                        <schema name="AudioLevel" constraint="64" getter="diagnose" type="string" />
+                        <schema name="Status" constraint="64" getter="diagnose" type="string" />
+                    </schema>
+
+                    <schema name="AudioDecoderNumberOfEntries"
+                        table="Device.Services.STBService.{i}.Components.AudioDecoder.{i}" type="multipleNumber" />
+                    <schema name="AudioDecoder.{i}" type="multipleObject">
+                        <schema name="AudioStandard"
+                            default="MPEG1-Part3-Layer2,MPEG1-Part3-Layer3,MPEG2-Part3-Layer2,MPEG2-Part3-Layer3,MPEG2.5,MP3-PRO,MP3-Surround,MPEG2-AAC-LC,MPEG4-AAC-LC,MPEG4-AAC-MP,MPEG4-BSAC,MPEG4-AAC-HE-v2,MPEG-Surround,DOLBY-AC3,DOLBY-DD+"
+                            type="string" />
+                    </schema>
+
+                    <schema name="VideoOutputNumberOfEntries"
+                        table="Device.Services.STBService.{i}.Components.VideoOutput.{i}" type="multipleNumber" />
+                    <schema name="VideoOutput.{i}" type="multipleObject">
+                        <schema name="HDCP" type="object">
+                            <schema name="Status" getter="diagnose" type="string" />
+                            <schema name="Type" getter="diagnose" type="string" />
+                        </schema>
+                    </schema>
+
+                    <schema name="VideoDecoderNumberOfEntries"
+                        table="Device.Services.STBService.{i}.Components.VideoDecoder.{i}" type="multipleNumber" />
+                    <schema name="VideoDecoder.{i}" type="multipleObject">
+                        <schema name="Name" constraint="256" getter="diagnose" type="string" />
+                        <schema name="Status" constraint="256" getter="diagnose" type="string" />
+                        <schema name="MPEG2Part2" constraint="256" getter="diagnose" type="string" />
+                        <schema name="MPEG4Part2" constraint="256" getter="diagnose" type="string" />
+                        <schema name="MPEG4Part10" constraint="256" getter="diagnose" type="string" />
+                        <schema name="ContentAspectRatio" constraint="256" getter="diagnose" type="string" />
+                    </schema>
+                </schema>
+
+                <schema name="Capabilities" type="object">
+                    <schema name="HDMI" type="object">
+                        <schema name="SupportedResolutions" getter="diagnose" type="string" />
+                        <schema name="CECSupport" getter="diagnose" type="boolean" />
+                    </schema>
+                    <schema name="VideoDecoder" type="object">
+                        <schema name="VideoStandards" default="MPEG2-Part2,MPEG4-Part2,H.264" type="string" />
+                        <schema name="MPEG2Part2" type="object">
+                            <schema name="AudioStandards"
+                                default="MPEG1-Part3-Layer2,MPEG1-Part3-Layer3,MPEG2-Part3-Layer2,MPEG2-Part3-Layer3,MPEG2.5,MP3-PRO,MP3-Surround,MPEG2-AAC-LC,MPEG4-AAC-LC,MPEG4-AAC-MP,MPEG4-BSAC,MPEG4-AAC-HE-v2,MPEG-Surround,DOLBY-AC3,DOLBY-DD+"
+                                type="string" />
+                            <schema name="ProfileLevelNumberOfEntries"
+                                table="Device.Services.STBService.{i}.Capabilities.VideoDecoder.MPEG2Part2.ProfileLevel.{i}"
+                                type="multipleNumber" />
+                            <schema name="ProfileLevel.{i}" type="multipleObject">
+                                <schema name="Profile" default="SP (Simple Profile)" type="string" />
+                                <schema name="Level" default="LL (Low Level)" type="string" />
+                                <schema name="MaximumDecodingCapability" default="96" type="unsignedInt" />
+                            </schema>
+                        </schema>
+                        <schema name="MPEG4Part2" type="object">
+                            <schema name="AudioStandards"
+                                default="MPEG1-Part3-Layer2,MPEG1-Part3-Layer3,MPEG2-Part3-Layer2,MPEG2-Part3-Layer3,MPEG2.5,MP3-PRO,MP3-Surround,MPEG2-AAC-LC,MPEG4-AAC-LC,MPEG4-AAC-MP,MPEG4-BSAC,MPEG4-AAC-HE-v2,MPEG-Surround,DOLBY-AC3,DOLBY-DD+"
+                                type="string" />
+                            <schema name="ProfileLevelNumberOfEntries"
+                                table="Device.Services.STBService.{i}.Capabilities.VideoDecoder.MPEG4Part2.ProfileLevel.{i}"
+                                type="multipleNumber" />
+                            <schema name="ProfileLevel.{i}" type="multipleObject">
+                                <schema name="Profile" default="SP (Simple Profile)" type="string" />
+                                <schema name="Level" default="L0" type="string" />
+                                <schema name="MaximumDecodingCapability" default="64" type="unsignedInt" />
+                            </schema>
+                        </schema>
+                        <schema name="MPEG4Part10" type="object">
+                            <schema name="AudioStandards"
+                                default="MPEG1-Part3-Layer2,MPEG1-Part3-Layer3,MPEG2-Part3-Layer2,MPEG2-Part3-Layer3,MPEG2.5,MP3-PRO,MP3-Surround,MPEG2-AAC-LC,MPEG4-AAC-LC,MPEG4-AAC-MP,MPEG4-BSAC,MPEG4-AAC-HE-v2,MPEG-Surround,DOLBY-AC3,DOLBY-DD+"
+                                type="string" />
+                            <schema name="ProfileLevelNumberOfEntries"
+                                table="Device.Services.STBService.{i}.Capabilities.VideoDecoder.MPEG4Part10.ProfileLevel.{i}"
+                                type="multipleNumber" />
+                            <schema name="ProfileLevel.{i}" type="multipleObject">
+                                <schema name="Profile" default="BASELINE" type="string" />
+                                <schema name="Level" default="1" type="string" />
+                                <schema name="MaximumDecodingCapability" default="64" type="unsignedInt" />
+                            </schema>
+                        </schema>
+                    </schema>
+
+                    <schema name="AudioDecoder" type="object">
+                        <schema name="AudioStandards"
+                            default="MPEG1-Part2-Layer2,MPEG1-Part2-Layer3,MPEG2-Part3-Layer2,MPEG2-Part3-Layer3,MP3-Surround,DOLBY-AC3"
+                            type="string" />
+                    </schema>
+                </schema>
+            </schema>
+        </schema>
+
+        <schema name="USB" type="object">
+            <schema name="USBHosts" type="object">
+                <schema name="HostNumberOfEntries" table="Device.USB.USBHosts.Host.{i}" type="multipleNumber" />
+                <schema name="Host.{i}" type="multipleObject">
+                    <schema name="DeviceNumberOfEntries" table="Device.USB.USBHosts.Host.{i}.Device.{i}"
+                        type="multipleNumber" />
+                    <schema name="Device.{i}" type="multipleObject">
+                        <schema name="SerialNumber" getter="diagnose" type="string" />
+                        <schema name="Manufacturer" getter="diagnose" type="string" />
+                        <schema name="ProductClass" getter="diagnose" type="string" />
+                        <schema name="USBVersion" getter="diagnose" type="string" />
+                        <schema name="DeviceProtocol" getter="diagnose" type="int" />
+                        <schema name="ProductID" getter="diagnose" type="int" />
+                        <schema name="VendorID" getter="diagnose" type="int" />
+                    </schema>
+                </schema>
+            </schema>
+        </schema>
+
+        <schema name="X_Skyworth" type="object">
+            <schema name="ManagementServer" type="object">
+                <schema name="Url" getter="diagnose" type="string" />
+                <schema name="Hostname" getter="diagnose" type="string" />
+                <schema name="Port" getter="diagnose" type="string" />
+            </schema>
+
+            <schema name="DreamInfo" getter="diagnose" setter="diagnose" type="string" write="W" />
+            <schema name="CurrentDreamInfo" getter="diagnose" type="string" />
+            <schema name="DreamTime" getter="diagnose" setter="diagnose" type="string" write="W" />
+            <schema name="TotalRAMUsageCapacity" getter="diagnose" type="int" />
+            <schema name="CpuTemperature" getter="diagnose" inform="true" type="int" />
+            <schema name="MaxAllowableCPUTemperature" default="120" type="int" />
+            <schema name="Reboot" type="object">
+                <schema name="Numbers" getter="diagnose" inform="true" type="int" />
+            </schema>
+            <schema name="FTI" type="object">
+                <schema name="ResidenceDuration" getter="diagnose" inform="true" setter="diagnose" type="int" write="W" />
+            </schema>
+
+            <schema name="ScreenInUse" getter="diagnose" inform="true" type="int" />
+            <schema name="InternalDataStorageFree" getter="diagnose" inform="true" type="int" />
+            <schema name="InternalDataStorageTotal" getter="diagnose" inform="true" type="int" />
+
+            <schema name="InternalDataStorageUtilisation" getter="diagnose" type="string" />
+            <schema name="MemoryUtilisation" getter="diagnose" type="string" />
+            <schema name="ActiveNetworkConnection" getter="diagnose" inform="true" type="string" />
+
+            <schema name="DownlinkRate" getter="diagnose" inform="true" type="int" />
+            <schema name="UplinkRate" getter="diagnose" inform="true" type="int" />
+
+            <schema name="Lock" type="object">
+                <schema name="Background" getter="diagnose" setter="diagnose" type="string" write="W" />
+                <schema name="Dialog" type="object">
+                    <schema name="Title" getter="diagnose" setter="diagnose" type="string" write="W" />
+                    <schema name="Message" getter="diagnose" setter="diagnose" type="string" write="W" />
+                    <schema name="NegativeButtonText" getter="diagnose" setter="diagnose" type="string" write="W" />
+                    <schema name="PositiveButtonText" getter="diagnose" setter="diagnose" type="string" write="W" />
+                </schema>
+                <schema name="Enable" getter="diagnose" inform="true" setter="diagnose" type="boolean" write="W" />
+            </schema>
+            <schema name="MqttServer" type="object">
+                <schema name="Url" getter="diagnose" setter="diagnose" type="string" write="W" />
+                <schema name="Enable" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+            </schema>
+            <schema name="TotalBytes" type="object">
+                <schema name="Today" getter="diagnose" inform="true" type="string" />
+                <schema name="TxTotal" getter="diagnose" inform="true" type="string" />
+                <schema name="RxTotal" getter="diagnose" inform="true" type="string" />
+            </schema>
+            <schema name="Mute" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+            <schema name="Volume" getter="diagnose" setter="diagnose" type="int" write="W" />
+            <schema name="ScreenSaver" getter="diagnose" type="int" />
+            <schema name="PatchLevel" getter="diagnose" type="string" />
+            <schema name="AndroidVersion" getter="diagnose" type="string" />
+            <schema name="AndroidTVOS" getter="diagnose" inform="true" type="string" />
+            <schema name="BuildVersion" getter="diagnose" type="string" />
+            <schema name="BluetoothMac" getter="diagnose" type="string" />
+            <schema name="DeviceName" getter="diagnose" type="string" />
+            <schema name="OperatorName" getter="diagnose" type="string" />
+
+            <schema name="LogStream" type="object">
+                <schema name="Enable" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+                <schema name="UploadUrl" getter="diagnose" setter="diagnose" type="string" write="W" />
+                <schema name="Level" getter="diagnose" setter="diagnose" type="string" write="W" />
+                <schema name="Keyword" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+                <schema name="Period" getter="diagnose" setter="diagnose" type="unsignedInt" write="W" />
+                <schema name="TransactionId" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+            </schema>
+
+            <schema name="Logcat" type="object">
+                <schema name="FileList" getter="diagnose" type="string" />
+                <schema name="DeleteFiles" setter="diagnose" type="string" write="W" />
+                <schema name="AutoUpload" type="object">
+                    <schema name="Enable" getter="diagnose" inform="true" setter="diagnose" type="boolean" write="W" />
+                    <schema name="Interval" getter="diagnose" setter="diagnose" type="unsignedInt" write="W" />
+                    <schema name="Url" getter="diagnose" setter="diagnose" type="string" write="W" />
+                </schema>
+                <schema name="Background" type="object">
+                    <schema name="Enable" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+                </schema>
+            </schema>
+
+            <schema name="UninstallApp" setter="diagnose" type="string" write="W" />
+            <schema name="UninstallApps" setter="diagnose" type="string" write="W" />
+            <schema name="Array" getter="diagnose" inform="true" type="string" />
+            <schema name="ArrayRecordInterval" getter="diagnose" setter="diagnose" type="unsignedInt" write="W" />
+
+            <schema name="AppNumberOfEntries" table="Device.X_Skyworth.App.{i}" type="multipleNumber" />
+            <schema name="App.{i}" type="multipleObject">
+                <schema name="Type" getter="diagnose" type="string" />
+                <schema name="PackageName" constraint="512" getter="diagnose" type="string" />
+                <schema name="Name" constraint="64" getter="diagnose" type="string" />
+                <schema name="Version" constraint="64" getter="diagnose" type="string" />
+                <schema name="BlockStatus" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+                <schema name="BlockEnable" getter="diagnose" type="boolean" />
+                <schema name="StopEnable" getter="diagnose" type="boolean" />
+                <schema name="Size" getter="diagnose" type="int" />
+                <schema name="Running" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+                <schema name="isUpdatedSystem" getter="diagnose" type="string" />
+                <schema name="LastUpdatedTime" getter="diagnose" type="string" />
+                <schema name="MemoryUsage" getter="diagnose" type="string" />
+                <schema name="StorageUsage" getter="diagnose" type="string" />
+                <schema name="Uptime" getter="diagnose" type="string" />
+                <schema name="TotalUptime" getter="diagnose" type="string" />
+                <schema name="RunningTimes" getter="diagnose" type="string" />
+                <schema name="LastStartTime" getter="diagnose" type="string" />
+                <schema name="CpuUsage" getter="diagnose" type="string" />
+                <schema name="ClearData" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+                <schema name="PermissionsNumberOfEntries" table="Device.X_Skyworth.App.{i}.Permissions.{i}"
+                    type="multipleNumber" />
+                <schema name="Permissions.{i}" type="multipleObject">
+                    <schema name="Name" getter="diagnose" type="string" />
+                    <schema name="Label" getter="diagnose" type="string" />
+                    <schema name="Granted" getter="diagnose" setter="diagnose" type="string" write="W" />
+                    <schema name="CanModify" getter="diagnose" type="boolean" />
+                </schema>
+            </schema>
+
+            <schema name="AppBatch" type="object">
+                <schema name="LockList" type="object">
+                    <schema name="Enable" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+                    <schema name="List" getter="diagnose" setter="diagnose" type="string" write="W" />
+                </schema>
+                <schema name="BlackList" type="object">
+                    <schema name="Enable" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+                    <schema name="List" getter="diagnose" setter="diagnose" type="string" write="W" />
+                </schema>
+                <schema name="WhiteList" type="object">
+                    <schema name="Enable" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+                    <schema name="List" getter="diagnose" setter="diagnose" type="string" write="W" />
+                </schema>
+            </schema>
+
+            <schema name="SyncParamInterval" getter="diagnose" setter="diagnose" type="unsignedInt" write="W" />
+
+            <schema name="Storage" type="object">
+                <schema name="Info" getter="diagnose" type="string" />
+                <schema name="AppsInfo" getter="diagnose" type="string" />
+                <schema name="Clear" setter="diagnose" type="boolean" write="W" />
+                <schema name="ClearAppsData" setter="diagnose" type="string" write="W" />
+                <schema name="ClearAppsCache" setter="diagnose" type="string" write="W" />
+            </schema>
+
+            <schema name="System" type="object">
+                <schema name="Setting" type="object">
+                    <schema name="Use24HourFormat" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+                </schema>
+            </schema>
+
+            <schema name="BluetoothDeviceNumberOfEntries" table="Device.X_Skyworth.BluetoothDevice.{i}"
+                type="multipleNumber" />
+            <schema name="BluetoothDevice.{i}" type="multipleObject">
+                <schema name="Type" getter="diagnose" type="string" />
+                <schema name="Mac" constraint="64" getter="diagnose" type="string" />
+                <schema name="Name" constraint="128" getter="diagnose" type="string" />
+                <schema name="ConnectionStatus" getter="diagnose" setter="diagnose" type="string" write="W" />
+                <schema name="Power" getter="diagnose" type="string" />
+                <schema name="RcuVersion" getter="diagnose" type="string" />
+            </schema>
+
+            <schema name="RemoteControl" type="object">
+                <schema name="Enable" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+                <schema name="UploadUrl" getter="diagnose" setter="diagnose" type="string" write="W" />
+                <schema name="FrameRate" getter="diagnose" setter="diagnose" type="unsignedInt" write="W" />
+                <schema name="IceServers" getter="diagnose" setter="diagnose" type="string" write="W" />
+                <schema name="DPI" type="object">
+                    <schema name="Width" getter="diagnose" setter="diagnose" type="unsignedInt" write="W" />
+                    <schema name="Height" getter="diagnose" setter="diagnose" type="unsignedInt" write="W" />
+                </schema>
+                <schema name="ConfirmResultUrl" getter="diagnose" setter="diagnose" type="string" write="W" />
+                <schema name="TransactionId" getter="diagnose" setter="diagnose" type="string" write="W" />
+            </schema>
+            <schema name="SpeedTest" type="object">
+                <schema name="Enable" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+                <schema name="Url" getter="diagnose" setter="diagnose" type="string" write="W" />
+                <schema name="TransactionId" getter="diagnose" setter="diagnose" type="string" write="W" />
+            </schema>
+            <schema name="Tcpdump" type="object">
+                <schema name="Enable" getter="diagnose" setter="diagnose" type="boolean" write="W" />
+                <schema name="Ip" getter="diagnose" setter="diagnose" type="string" write="W" />
+                <schema name="Port" getter="diagnose" setter="diagnose" type="string" write="W" />
+                <schema name="NetType" getter="diagnose" setter="diagnose" type="string" write="W" />
+                <schema name="Duration" getter="diagnose" setter="diagnose" type="string" write="W" />
+                <schema name="FileSize" getter="diagnose" setter="diagnose" type="int" write="W" />
+                <schema name="FileType" getter="diagnose" setter="diagnose" type="string" write="W" />
+                <schema name="Url" getter="diagnose" setter="diagnose" type="string" write="W" />
+            </schema>
+
+            <schema name="RemoteSSH" type="object">
+                <schema name="Enable" getter="diagnose" setter="diagnose" type="string" write="W" />
+                <schema name="IpPort" getter="diagnose" setter="diagnose" type="string" write="W" />
+            </schema>
+            <schema name="LowFrequencyInterval" getter="diagnose" setter="diagnose" type="string" write="W" />
+            <schema name="LowFrequencyNode" getter="diagnose" setter="diagnose" type="string" write="W" />
+
+            <schema name="MaxScreenRecordFileSize" getter="diagnose" setter="diagnose" type="unsignedInt" write="W" />
+            <schema name="StandbyMode" getter="diagnose" setter="diagnose" type="string" write="W" />
+            <schema name="Standby" type="object">
+                <schema name="Url" getter="diagnose" setter="diagnose" type="string" write="W" />
+                <schema name="Enable" getter="diagnose" setter="diagnose" type="string" write="W" />
+            </schema>
+            <schema name="SleepTime" getter="diagnose" setter="diagnose" type="string" write="W" />
+            <schema name="IsSleep" getter="diagnose" setter="diagnose" type="string" write="W" />
+            <schema name="SoundSwitch" getter="diagnose" setter="diagnose" type="string" write="W" />
+            <schema name="Sound" getter="diagnose" setter="diagnose" type="string" write="W" />
+
+            <schema name="UpgradeResponse" type="object">
+                <schema name="Enable" getter="diagnose" setter="diagnose" type="string" write="W" />
+                <schema name="Status" getter="diagnose" setter="diagnose" type="string" write="W" />
+                <schema name="Message" getter="diagnose" setter="diagnose" type="string" write="W" />
+                <schema name="PlanId" getter="diagnose" setter="diagnose" type="string" write="W" />
+                <schema name="DeviceId" getter="diagnose" setter="diagnose" type="string" write="W" />
+                <schema name="OperatorCode" getter="diagnose" setter="diagnose" type="string" write="W" />
+            </schema>
+            <schema name="UploadResponse" type="object">
+                <schema name="Status" getter="diagnose" setter="diagnose" type="string" write="W" />
+                <schema name="Message" getter="diagnose" setter="diagnose" type="string" write="W" />
+            </schema>
+
+            <schema name="Netflix" type="object">
+                <schema name="ESN" getter="diagnose" type="string" />
+            </schema>
+            <schema name="BugReport" type="object">
+                <schema name="Url" getter="diagnose" setter="diagnose" type="string" write="W" />
+            </schema>
+
+        </schema>
+
+    </schema>
+</model>

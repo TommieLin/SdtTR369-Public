@@ -1,0 +1,36 @@
+From 93a76f919eedf6dd29636362ab23b018612f16fe Mon Sep 17 00:00:00 2001
+From: lintong <lintong@skyworth.com>
+Date: Wed, 01 Mar 2023 14:10:49 +0800
+Subject: [PATCH] [SWMD-639][E2E]增加盒子在CMS Lock状态下允许响应的按键
+
+Change-Id: I93a4025cbd6162d25d685896ccd13aed9c1e5aea
+---
+
+diff --git a/frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java b/frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+index f5c1ca4..17572d4 100644
+--- a/frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
++++ b/frameworks/base/services/core/java/com/android/server/policy/PhoneWindowManager.java
+@@ -3429,6 +3429,23 @@
+             return 0;
+         }
+ 
++        // When the STB is locked, only the below keys can be used, and other keys are forbidden.
++        // Add by skyworth Outis, 2023/3/1
++        if (SystemProperties.get("persist.sys.tr069.lock").equals("1")
++                && keyCode != KeyEvent.KEYCODE_POWER && keyCode != KeyEvent.KEYCODE_DPAD_CENTER
++                && keyCode != KeyEvent.KEYCODE_DPAD_LEFT && keyCode != KeyEvent.KEYCODE_DPAD_RIGHT
++                && keyCode != KeyEvent.KEYCODE_DPAD_UP && keyCode != KeyEvent.KEYCODE_DPAD_DOWN
++                && keyCode != KeyEvent.KEYCODE_BACK && keyCode != KeyEvent.KEYCODE_VOLUME_MUTE
++                && keyCode != KeyEvent.KEYCODE_VOLUME_UP && keyCode != KeyEvent.KEYCODE_VOLUME_DOWN
++                && keyCode != KeyEvent.KEYCODE_0 && keyCode != KeyEvent.KEYCODE_1
++                && keyCode != KeyEvent.KEYCODE_2 && keyCode != KeyEvent.KEYCODE_3
++                && keyCode != KeyEvent.KEYCODE_4 && keyCode != KeyEvent.KEYCODE_5
++                && keyCode != KeyEvent.KEYCODE_6 && keyCode != KeyEvent.KEYCODE_7
++                && keyCode != KeyEvent.KEYCODE_8 && keyCode != KeyEvent.KEYCODE_9) {
++            Log.e(TAG, "The set-top box is locked. This key cannot be used. keycode: " + keyCode);
++            return 0;
++        }
++
+         final boolean interactive = (policyFlags & FLAG_INTERACTIVE) != 0;
+         final boolean canceled = event.isCanceled();
+         final int displayId = event.getDisplayId();

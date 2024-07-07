@@ -1,0 +1,117 @@
+diff --git a/frameworks/base/packages/Shell/src/com/android/shell/BugreportProgressService.java b/frameworks/base/packages/Shell/src/com/android/shell/BugreportProgressService.java
+index 8c7011253c8..f0a0952a8c9 100644
+--- a/frameworks/base/packages/Shell/src/com/android/shell/BugreportProgressService.java
++++ b/frameworks/base/packages/Shell/src/com/android/shell/BugreportProgressService.java
+@@ -102,6 +102,7 @@ import java.io.FileNotFoundException;
+ import java.io.FileOutputStream;
+ import java.io.IOException;
+ import java.io.InputStream;
++import java.io.OutputStream;
+ import java.io.PrintWriter;
+ import java.nio.charset.StandardCharsets;
+ import java.security.MessageDigest;
+@@ -260,6 +261,13 @@ public class BugreportProgressService extends Service {
+     private boolean mIsWatch;
+     private boolean mIsTv;
+ 
++    /* SWMD-1091: Bugreport function required by Skyworth TMS */
++    private String mBugreportsDirTMS = null;
++    static final String EXTRA_TMS_BUGREPORT_DIR = "android.intent.extra.tms.BUGREPORT_DIR";
++    static final String ACTION_TMS_BUGREPORT_FINISH = "com.sdt.tms.intent.action.BUGREPORT_FINISH";
++    static final String ACTION_TMS_BUGREPORT_ERROR = "com.sdt.tms.intent.action.BUGREPORT_ERROR";
++    /* SWMD-1091 end */
++
+     @Override
+     public void onCreate() {
+         mContext = getApplicationContext();
+@@ -372,6 +380,13 @@ public class BugreportProgressService extends Service {
+                 stopProgressLocked(mInfo.id);
+                 mInfo.deleteEmptyFiles();
+             }
++            /* SWMD-1091: Notify TMS of Bugreport API callback error */
++            if (!TextUtils.isEmpty(mBugreportsDirTMS)) {
++                sendTMSBugreportFinishedBroadcast(
++                        ACTION_TMS_BUGREPORT_ERROR, "Bugreport API callback error", "");
++                mBugreportsDirTMS = null;
++            }
++            /* SWMD-1091 end */
+             Log.e(TAG, "Bugreport API callback onError() errorCode = " + errorCode);
+             return;
+         }
+@@ -412,6 +427,12 @@ public class BugreportProgressService extends Service {
+ 
+         @GuardedBy("mLock")
+         private void sendBugreportFinishedBroadcastLocked() {
++            /* SWMD-1091: Additional processing of generated bugreport file for Skyworth TMS */
++            if (!TextUtils.isEmpty(mBugreportsDirTMS)) {
++                handleBugreportFileForTMS(mInfo.bugreportFile);
++                mBugreportsDirTMS = null;
++            }
++            /* SWMD-1091 end */
+             final String bugreportFilePath = mInfo.bugreportFile.getAbsolutePath();
+             if (mInfo.type == BugreportParams.BUGREPORT_MODE_REMOTE) {
+                 sendRemoteBugreportFinishedBroadcast(mContext, bugreportFilePath,
+@@ -427,6 +448,49 @@ public class BugreportProgressService extends Service {
+         }
+     }
+ 
++    /* SWMD-1091: Copy the bugreport file from the private path of the Shell application
++                  to the path specified by TMS, and notify in the form of broadcast after
++                  the copy is completed. */
++    private void handleBugreportFileForTMS(File sourceFile) {
++        Log.d(TAG, "handleBugreportFileForTMS start...");
++        File targetDirectory = new File(mBugreportsDirTMS);
++        if (!targetDirectory.exists() || !targetDirectory.isDirectory()) {
++            Log.e(TAG, "handleBugreportFileForTMS: Target folder recognition exception");
++            sendTMSBugreportFinishedBroadcast(
++                    ACTION_TMS_BUGREPORT_ERROR, "No such target file or directory", "");
++        }
++
++        File targetFile = new File(targetDirectory, sourceFile.getName());
++        try (InputStream in = new FileInputStream(sourceFile);
++                OutputStream out = new FileOutputStream(targetFile)) {
++
++            byte[] buffer = new byte[1024];
++            int length;
++
++            while ((length = in.read(buffer)) > 0) {
++                out.write(buffer, 0, length);
++            }
++            out.flush();
++
++            Log.d(TAG, "handleBugreportFileForTMS Success");
++            sendTMSBugreportFinishedBroadcast(
++                    ACTION_TMS_BUGREPORT_FINISH, "Success", targetFile.getPath());
++        } catch (IOException e) {
++            Log.e(TAG, "handleBugreportFileForTMS error, " + e.getMessage());
++            sendTMSBugreportFinishedBroadcast(ACTION_TMS_BUGREPORT_ERROR, e.getMessage(), "");
++        }
++    }
++
++    private void sendTMSBugreportFinishedBroadcast(String action, String reason, String filePath) {
++        Intent intent = new Intent(action);
++        intent.putExtra("reason", reason);
++        if (ACTION_TMS_BUGREPORT_FINISH.equals(action)) {
++            intent.putExtra("path", filePath);
++        }
++        mContext.sendBroadcast(intent);
++    }
++    /* SWMD-1091 end */
++
+     private static void sendRemoteBugreportFinishedBroadcast(Context context,
+             String bugreportFileName, File bugreportFile) {
+         cleanupOldFiles(REMOTE_BUGREPORT_FILES_AMOUNT, REMOTE_MIN_KEEP_AGE,
+@@ -616,6 +680,13 @@ public class BugreportProgressService extends Service {
+         String baseName = getBugreportBaseName(bugreportType);
+         String name = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss").format(new Date());
+ 
++        /* SWMD-1091: To set additional path for storing Bugreport folder for Skyworth TMS */
++        mBugreportsDirTMS = intent.getStringExtra(EXTRA_TMS_BUGREPORT_DIR);
++        if (!TextUtils.isEmpty(mBugreportsDirTMS)) {
++            Log.d(TAG, "The path used by TMS to store bugreport file is: " + mBugreportsDirTMS);
++        }
++        /* SWMD-1091 end */
++
+         BugreportInfo info = new BugreportInfo(mContext, baseName, name,
+                 shareTitle, shareDescription, bugreportType, mBugreportsDir);
+         synchronized (mLock) {
